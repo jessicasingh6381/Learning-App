@@ -36,7 +36,7 @@ const submit = () => {
                 <TextInput
                     id="name"
                     type="text"
-                    class="mt-1 block w-full"
+                    class="mb-1"
                     v-model="form.name"
                     required
                     autofocus
@@ -52,7 +52,7 @@ const submit = () => {
                 <TextInput
                     id="email"
                     type="email"
-                    class="mt-1 block w-full"
+                    class="mb-1"
                     v-model="form.email"
                     required
                     autocomplete="username"
@@ -84,7 +84,7 @@ const submit = () => {
                 <TextInput
                     id="password"
                     type="password"
-                    class="mt-1 block w-full"
+                    class="mb-1"
                     v-model="form.password"
                     required
                     autocomplete="new-password"
@@ -102,7 +102,7 @@ const submit = () => {
                 <TextInput
                     id="password_confirmation"
                     type="password"
-                    class="mt-1 block w-full"
+                    class="mb-1"
                     v-model="form.password_confirmation"
                     required
                     autocomplete="new-password"
@@ -114,17 +114,16 @@ const submit = () => {
                 />
             </div>
 
-            <div class="mt-4 flex items-center justify-end">
+            <div class="mt-4 d-flex align-items-center justify-content-between">
                 <Link
                     :href="route('login')"
-                    class="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                    class="link-secondary"
                 >
                     Already registered?
                 </Link>
 
                 <PrimaryButton
                     class="ms-4"
-                    :class="{ 'opacity-25': form.processing }"
                     :disabled="form.processing"
                 >
                     Register

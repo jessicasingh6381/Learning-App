@@ -38,7 +38,7 @@ const submit = () => {
                 <TextInput
                     id="email"
                     type="email"
-                    class="mt-1 block w-full"
+                    class="mb-1"
                     v-model="form.email"
                     required
                     autofocus
@@ -54,7 +54,7 @@ const submit = () => {
                 <TextInput
                     id="password"
                     type="password"
-                    class="mt-1 block w-full"
+                    class="mb-1"
                     v-model="form.password"
                     required
                     autocomplete="new-password"
@@ -72,7 +72,7 @@ const submit = () => {
                 <TextInput
                     id="password_confirmation"
                     type="password"
-                    class="mt-1 block w-full"
+                    class="mb-1"
                     v-model="form.password_confirmation"
                     required
                     autocomplete="new-password"
@@ -84,9 +84,8 @@ const submit = () => {
                 />
             </div>
 
-            <div class="mt-4 flex items-center justify-end">
+            <div class="mt-4 text-end">
                 <PrimaryButton
-                    :class="{ 'opacity-25': form.processing }"
                     :disabled="form.processing"
                 >
                     Reset Password

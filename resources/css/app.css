@@ -10,3 +10,4 @@ body { background: #f5f8fa; color: var(--school-ink); }
 .empty-state { padding: 3rem 1rem; text-align: center; color: #63717a; }
 .skip-link { position: absolute; left: -9999px; }
 .skip-link:focus { left: 1rem; top: 1rem; z-index: 2000; }
+.native-modal::backdrop { background: rgba(20, 32, 40, .62); }

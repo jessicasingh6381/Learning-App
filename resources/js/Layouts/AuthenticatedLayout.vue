@@ -12,7 +12,7 @@ const can = (permission: string) => page.props.auth.permissions?.includes(permis
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
             <div id="mainNav" class="collapse navbar-collapse">
                 <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><Link class="nav-link" :class="{active: route().current('dashboard')}" :href="route('dashboard')">Dashboard</Link></li>
+                    <li v-if="can('dashboard.view')" class="nav-item"><Link class="nav-link" :class="{active: route().current('dashboard')}" :href="route('dashboard')">Dashboard</Link></li>
                     <li v-if="can('students.view')" class="nav-item"><Link class="nav-link" :href="route('students.index')">Students</Link></li>
                     <li v-if="can('school-years.view')" class="nav-item"><Link class="nav-link" :href="route('school-years.index')">School years</Link></li>
                     <li v-if="can('members.view')" class="nav-item"><Link class="nav-link" :href="route('members.index')">Members</Link></li>
