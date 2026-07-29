@@ -10,6 +10,8 @@ interface SchoolYear {
     start_date: string;
     end_date: string;
     status: string;
+    instructional_weekday_label: string;
+    base_instructional_days: number;
     instructional_day_target: number | null;
 }
 
@@ -32,6 +34,11 @@ const canManage = usePage<any>().props.auth.permissions.includes(
                     One school year may be active at a time. History is never
                     deleted.
                 </p>
+                <p class="mb-0 small text-secondary">
+                    Base days are calculated from the weekly schedule. Holiday
+                    and closure adjustments will be added with calendar
+                    profiles.
+                </p>
             </div>
             <Link
                 v-if="canManage"
@@ -51,8 +58,10 @@ const canManage = usePage<any>().props.auth.permissions.includes(
                         <tr>
                             <th>Name</th>
                             <th>Dates</th>
+                            <th>Weekly schedule</th>
+                            <th>Base instructional days</th>
+                            <th>Day target</th>
                             <th>Status</th>
-                            <th>Instructional days</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -63,10 +72,15 @@ const canManage = usePage<any>().props.auth.permissions.includes(
                                 {{ formatDateOnly(year.start_date) }} –
                                 {{ formatDateOnly(year.end_date) }}
                             </td>
-                            <td><StatusBadge :status="year.status" /></td>
+                            <td>{{ year.instructional_weekday_label }}</td>
+                            <td>{{ year.base_instructional_days }}</td>
                             <td>
-                                {{ year.instructional_day_target ?? '—' }}
+                                {{
+                                    year.instructional_day_target ??
+                                    'Not set'
+                                }}
                             </td>
+                            <td><StatusBadge :status="year.status" /></td>
                             <td class="text-end">
                                 <Link
                                     v-if="canManage"

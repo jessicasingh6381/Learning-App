@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Domain\SchoolYears\InstructionalSchedule;
 use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -25,13 +26,74 @@ class SchoolYearRequest extends FormRequest
             'end_date' => ['required', 'date', 'after:start_date'],
             'timezone' => ['required', 'timezone'],
             'status' => ['required', Rule::in(['draft', 'active', 'closed', 'archived'])],
+            'instructional_week_type' => ['required', Rule::in(InstructionalSchedule::TYPES)],
+            'instructional_weekdays' => ['required', 'array', 'min:1', 'max:7'],
+            'instructional_weekdays.*' => [
+                'bail',
+                static function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (! is_int($value)) {
+                        $fail('Each instructional weekday must be an integer ISO weekday.');
+                    }
+                },
+                'integer',
+                'between:1,7',
+                'distinct:strict',
+            ],
             'instructional_day_target' => ['nullable', 'integer', 'between:1,366'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $weekdays = $this->input('instructional_weekdays');
+
+        if (
+            is_array($weekdays)
+            && array_is_list($weekdays)
+            && collect($weekdays)->every(
+                static fn (mixed $weekday): bool => is_int($weekday),
+            )
+        ) {
+            $this->merge([
+                'instructional_weekdays' => InstructionalSchedule::normalize($weekdays),
+            ]);
+        }
     }
 
     public function after(): array
     {
         return [function (Validator $validator): void {
+            $weekdays = $this->input('instructional_weekdays');
+            $hasWeekdayErrors = collect($validator->errors()->keys())->contains(
+                static fn (string $key): bool => str_starts_with(
+                    $key,
+                    'instructional_weekdays',
+                ),
+            );
+
+            if (is_array($weekdays) && ! array_is_list($weekdays)) {
+                $validator->errors()->add(
+                    'instructional_weekdays',
+                    'Instructional weekdays must be a list of ISO weekday numbers.',
+                );
+                $hasWeekdayErrors = true;
+            }
+
+            if (
+                ! $validator->errors()->has('instructional_week_type')
+                && ! $hasWeekdayErrors
+                && is_array($weekdays)
+                && ! InstructionalSchedule::matchesPreset(
+                    (string) $this->input('instructional_week_type'),
+                    $weekdays,
+                )
+            ) {
+                $validator->errors()->add(
+                    'instructional_week_type',
+                    'The selected weekdays do not match this preset. Choose Custom schedule or restore the preset weekdays.',
+                );
+            }
+
             $schoolYear = $this->route('school_year');
             $requestedStatus = (string) $this->input('status');
 

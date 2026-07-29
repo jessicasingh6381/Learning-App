@@ -15,7 +15,16 @@ class AuditService
 {
     private const FIELDS = [
         Student::class => ['user_id', 'first_name', 'middle_name', 'last_name', 'preferred_name', 'status', 'archived_at'],
-        SchoolYear::class => ['name', 'start_date', 'end_date', 'timezone', 'status', 'instructional_day_target'],
+        SchoolYear::class => [
+            'name',
+            'start_date',
+            'end_date',
+            'timezone',
+            'status',
+            'instructional_day_target',
+            'instructional_week_type',
+            'instructional_weekdays',
+        ],
         StudentEnrollment::class => ['student_id', 'school_year_id', 'grade_level_id', 'enrollment_date', 'completion_date', 'status'],
         TenantMembership::class => ['user_id', 'role', 'status'],
     ];
