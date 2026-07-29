@@ -5,7 +5,7 @@ Learning App is a multi-tenant online learning and homeschool platform. Mileston
 ## Technology
 
 - Laravel 12 / PHP 8.2+
-- Laravel Breeze session authentication and Inertia
+- Laravel session authentication and Inertia
 - Vue 3, TypeScript, Pinia, and Vite
 - Bootstrap 5
 - MySQL/MariaDB locally; SQLite in memory for tests
@@ -59,7 +59,7 @@ npm test
 npm run build
 ```
 
-`phpunit.xml` forces SQLite `:memory:` and `tests/TestCase.php` refuses to run feature tests against anything else. This protects `learning_app` and every other persistent database from `RefreshDatabase`.
+`phpunit.xml` forces SQLite `:memory:`. Before Laravel's testing traits can run migrations, refreshes, or truncation, `tests/TestCase.php` checks the booted database configuration and accepts only the SQLite driver with the exact database name `:memory:`. Missing or malformed values fail closed. This protects `learning_app` and every other persistent database from destructive test setup.
 
 ## Database and seed data
 
@@ -67,20 +67,30 @@ npm run build
 
 ## Windows/XAMPP notes
 
-- XAMPP’s MariaDB client may not be on `PATH`; use `C:\xampp\mysql\bin\mysql.exe`.
-- Keep Apache’s document root on `public`.
+- XAMPP's MariaDB client may not be on `PATH`; use `C:\xampp\mysql\bin\mysql.exe`.
+- Keep Apache's document root on `public`.
 - Ensure PHP extensions required by Laravel are enabled in XAMPP.
-- The current workspace name contains a double “i” (`Learniing-App`); the friendly hostname is unaffected.
+- The current workspace name contains a double "i" (`Learniing-App`); the friendly hostname is unaffected.
 
 ## Architecture summary
 
-The active tenant is a server-side session selection validated against an active membership. Tenant middleware runs before route model binding. Tenant-owned models receive a centralized global scope and automatically receive the active `tenant_id` when created. Policies and permission mappings provide a second authorization boundary. Students are academic profiles with an optional login relationship; grade is stored on a school-year enrollment, not the student.
+The active tenant is a server-side session selection validated against an active membership on each tenant request. Tenant middleware runs before route model binding. Tenant-owned models receive a centralized, fail-closed global scope and automatically receive the active `tenant_id` when created. Code that genuinely needs an unscoped query must opt into Laravel's explicit `withoutGlobalScopes()` API. Policies and centralized permission mappings provide a second authorization boundary. Students are academic profiles with an optional login relationship; grade is stored on a school-year enrollment, not the student.
 
 See [Milestone 1 architecture](docs/architecture.md) for rules and decisions.
 
 ## Shared hosting and cPanel
 
-Deploy source and Composer production dependencies, configure the web root to `public`, create a dedicated database/user, supply production environment variables outside Git, and run `php artisan migrate --force`. Use `APP_ENV=production`, `APP_DEBUG=false`, HTTPS, secure cookies, writable `storage`/`bootstrap/cache`, and Laravel scheduler/queue configuration only when later features need them. Build frontend assets before deployment when Node is unavailable on the host.
+Deploy source and Composer production dependencies, configure the web root to `public`, create a dedicated database/user, supply production environment variables outside Git, and run `php artisan migrate --force`. Use `APP_ENV=production`, `APP_DEBUG=false`, HTTPS, secure cookies, and writable `storage`/`bootstrap/cache`. The generated `public/build` directory is intentionally ignored by Git, so run `npm ci && npm run build` during deployment or include the resulting build directory in the deployment artifact. Laravel scheduler/queue configuration is only needed when later features introduce background work.
+
+## Foundation behavior
+
+- Owners and administrators manage existing memberships. Adding or inviting members, acceptance tokens, and invitation email are deferred.
+- Students have legal first/last names and an optional preferred name. The preferred name is used for ordinary display when present; the legal names remain stored.
+- School-year transitions are `draft -> active|archived`, `active -> closed|archived`, and `closed -> archived`; archived is terminal. Activating a year closes the tenant's prior active year transactionally.
+- One planned or active enrollment is allowed per student and school year. Completion and withdrawal dates are required for those terminal statuses and must fall within the school-year dates.
+- Dashboard active students exclude inactive/archived students; current enrollments include planned/active only; the active year has status `active`; setup indicators reflect whether those records exist. Recent audit activity is visible only to users with tenant-management permission.
+- Calendar values are stored as date-only fields. They represent the tenant's stated calendar dates and do not undergo server-timezone conversion.
+- Final-owner checks run in transactions and at model boundaries. A tenant with memberships cannot be deleted directly.
 
 ## Deferred work
 
