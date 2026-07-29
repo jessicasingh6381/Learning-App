@@ -15,6 +15,18 @@ const can = (permission: string) => page.props.auth.permissions?.includes(permis
                     <li v-if="can('dashboard.view')" class="nav-item"><Link class="nav-link" :class="{active: route().current('dashboard')}" :href="route('dashboard')">Dashboard</Link></li>
                     <li v-if="can('students.view')" class="nav-item"><Link class="nav-link" :href="route('students.index')">Students</Link></li>
                     <li v-if="can('school-years.view')" class="nav-item"><Link class="nav-link" :href="route('school-years.index')">School years</Link></li>
+                    <li v-if="can('academic-config.view')" class="nav-item dropdown">
+                        <button class="nav-link dropdown-toggle" type="button" data-bs-toggle="dropdown" :aria-expanded="false">Academic setup</button>
+                        <ul class="dropdown-menu">
+                            <li><Link class="dropdown-item" :href="route('academic.overview')">Overview</Link></li>
+                            <li><Link class="dropdown-item" :href="route('academic.providers.index')">Providers</Link></li>
+                            <li><Link class="dropdown-item" :href="route('academic.calendars.index')">Calendars</Link></li>
+                            <li><Link class="dropdown-item" :href="route('academic.standards.index')">Standards</Link></li>
+                            <li><Link class="dropdown-item" :href="route('academic.subjects.index')">Subjects</Link></li>
+                            <li><Link class="dropdown-item" :href="route('academic.courses.index')">Courses</Link></li>
+                            <li><Link class="dropdown-item" :href="route('academic.curriculum.index')">Curriculum</Link></li>
+                        </ul>
+                    </li>
                     <li v-if="can('members.view')" class="nav-item"><Link class="nav-link" :href="route('members.index')">Members</Link></li>
                 </ul>
                 <div class="d-flex align-items-center gap-2 flex-wrap">

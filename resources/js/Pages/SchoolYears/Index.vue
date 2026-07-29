@@ -20,6 +20,9 @@ defineProps<{ schoolYears: SchoolYear[] }>();
 const canManage = usePage<any>().props.auth.permissions.includes(
     'school-years.manage',
 );
+const canConfigureAcademics = usePage<any>().props.auth.permissions.includes(
+    'academic-config.view',
+);
 </script>
 
 <template>
@@ -35,9 +38,8 @@ const canManage = usePage<any>().props.auth.permissions.includes(
                     deleted.
                 </p>
                 <p class="mb-0 small text-secondary">
-                    Base days are calculated from the weekly schedule. Holiday
-                    and closure adjustments will be added with calendar
-                    profiles.
+                    Base days come from the weekly schedule. Academic setup
+                    applies saved calendar exceptions and overrides.
                 </p>
             </div>
             <Link
@@ -82,9 +84,9 @@ const canManage = usePage<any>().props.auth.permissions.includes(
                             </td>
                             <td><StatusBadge :status="year.status" /></td>
                             <td class="text-end">
-                                <Link
-                                    v-if="canManage"
-                                    class="btn btn-sm btn-outline-secondary"
+                                        <Link
+                                            v-if="canManage"
+                                            class="btn btn-sm btn-outline-secondary"
                                     :href="
                                         route(
                                             'school-years.edit',
@@ -92,8 +94,15 @@ const canManage = usePage<any>().props.auth.permissions.includes(
                                         )
                                     "
                                 >
-                                    Edit
-                                </Link>
+                                            Edit
+                                        </Link>
+                                        <Link
+                                            v-if="canConfigureAcademics"
+                                            class="btn btn-sm btn-outline-primary ms-2"
+                                            :href="route('academic.overview', { school_year_id: year.id })"
+                                        >
+                                            Configure academics
+                                        </Link>
                             </td>
                         </tr>
                     </tbody>
