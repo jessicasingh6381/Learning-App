@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\GradeLevel;
+use App\Models\SchoolYear;
 use App\Models\Student;
 use App\Models\Tenant;
 use App\Models\TenantMembership;
@@ -255,6 +256,68 @@ class VerificationRegressionTest extends TestCase
             'timezone' => 'UTC',
             'status' => 'active',
         ])->assertSessionHasErrors('status')->assertSessionDoesntHaveErrors('name');
+    }
+
+    public function test_school_year_pages_serialize_date_only_values_and_integer_targets_without_mutation(): void
+    {
+        $owner = User::factory()->create();
+        $tenant = $this->tenant();
+        $this->membership($owner, $tenant);
+        $year = $tenant->schoolYears()->create([
+            'name' => '2026-2027',
+            'start_date' => '2026-08-12',
+            'end_date' => '2027-05-27',
+            'timezone' => 'America/Chicago',
+            'status' => 'draft',
+            'instructional_day_target' => 180,
+        ]);
+        $before = DB::table('school_years')->where('id', $year->id)->first();
+
+        $this->actingIn($owner, $tenant)->get('/school-years')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('SchoolYears/Index')
+                ->has('schoolYears', 1)
+                ->where('schoolYears.0.start_date', '2026-08-12')
+                ->where('schoolYears.0.end_date', '2027-05-27')
+                ->where('schoolYears.0.instructional_day_target', 180));
+
+        $this->actingIn($owner, $tenant)->get("/school-years/{$year->id}/edit")
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('SchoolYears/Form')
+                ->where('schoolYear.start_date', '2026-08-12')
+                ->where('schoolYear.end_date', '2027-05-27')
+                ->where('schoolYear.instructional_day_target', 180));
+
+        $this->assertEquals(
+            $before,
+            DB::table('school_years')->where('id', $year->id)->first(),
+        );
+    }
+
+    public function test_school_year_instructional_day_target_is_persisted_as_an_integer(): void
+    {
+        $owner = User::factory()->create();
+        $tenant = $this->tenant();
+        $this->membership($owner, $tenant);
+
+        $this->actingIn($owner, $tenant)->post('/school-years', [
+            'name' => '2026-2027',
+            'start_date' => '2026-08-12',
+            'end_date' => '2027-05-27',
+            'timezone' => 'America/Chicago',
+            'status' => 'draft',
+            'instructional_day_target' => '180',
+        ])->assertRedirect(route('school-years.index'));
+
+        $year = SchoolYear::query()->sole();
+
+        $this->assertSame(180, $year->instructional_day_target);
+        $this->assertDatabaseHas('school_years', [
+            'id' => $year->id,
+            'instructional_day_target' => 180,
+        ]);
     }
 
     public function test_enrollment_validation_blocks_archived_students_closed_years_and_invalid_dates(): void

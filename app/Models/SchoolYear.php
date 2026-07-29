@@ -14,7 +14,11 @@ class SchoolYear extends Model
 
     protected function casts(): array
     {
-        return ['start_date' => 'date', 'end_date' => 'date'];
+        return [
+            'start_date' => 'date:Y-m-d',
+            'end_date' => 'date:Y-m-d',
+            'instructional_day_target' => 'integer',
+        ];
     }
 
     public function enrollments(): HasMany
