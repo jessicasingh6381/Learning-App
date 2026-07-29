@@ -6,6 +6,7 @@ use App\Http\Requests\StudentRequest;
 use App\Models\Student;
 use App\Services\AuditService;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -28,8 +29,12 @@ class StudentController extends Controller
 
     public function store(StudentRequest $request, AuditService $audit): RedirectResponse
     {
-        $student = Student::create($request->validated());
-        $audit->record('student.created', $student, [], $student->toArray());
+        $student = DB::transaction(function () use ($request, $audit) {
+            $student = Student::create($request->validated());
+            $audit->record('student.created', $student, [], $student->toArray());
+
+            return $student;
+        });
 
         return redirect()->route('students.show', $student)->with('success', 'Student added.');
     }
@@ -50,9 +55,11 @@ class StudentController extends Controller
 
     public function update(StudentRequest $request, Student $student, AuditService $audit): RedirectResponse
     {
-        $before = $student->toArray();
-        $student->update($request->validated());
-        $audit->record('student.updated', $student, $before, $student->fresh()->toArray());
+        DB::transaction(function () use ($request, $student, $audit) {
+            $before = $student->toArray();
+            $student->update($request->validated());
+            $audit->record('student.updated', $student, $before, $student->fresh()->toArray());
+        });
 
         return redirect()->route('students.show', $student)->with('success', 'Student updated.');
     }
@@ -60,9 +67,11 @@ class StudentController extends Controller
     public function archive(Student $student, AuditService $audit): RedirectResponse
     {
         Gate::authorize('update', $student);
-        $before = $student->toArray();
-        $student->update(['status' => 'archived', 'archived_at' => now()]);
-        $audit->record('student.archived', $student, $before, $student->fresh()->toArray());
+        DB::transaction(function () use ($student, $audit) {
+            $before = $student->toArray();
+            $student->update(['status' => 'archived', 'archived_at' => now()]);
+            $audit->record('student.archived', $student, $before, $student->fresh()->toArray());
+        });
 
         return back()->with('success', 'Student archived; enrollment history was retained.');
     }

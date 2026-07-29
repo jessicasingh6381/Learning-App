@@ -55,6 +55,7 @@ class RegisteredUserController extends Controller
         event(new Registered($user));
 
         Auth::login($user);
+        $request->session()->regenerate();
         $request->session()->put('active_tenant_id', $tenant->id);
 
         return redirect(route('dashboard', absolute: false));

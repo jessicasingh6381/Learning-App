@@ -30,8 +30,10 @@ class EnrollmentController extends Controller
 
     public function store(EnrollmentRequest $request, AuditService $audit): RedirectResponse
     {
-        $enrollment = DB::transaction(function () use ($request) {
+        $enrollment = DB::transaction(function () use ($request, $audit) {
             $data = $request->validated();
+            Student::query()->whereKey($data['student_id'])->lockForUpdate()->firstOrFail();
+
             if (in_array($data['status'], ['planned', 'active'], true)) {
                 $duplicate = StudentEnrollment::query()->where('student_id', $data['student_id'])
                     ->where('school_year_id', $data['school_year_id'])->whereIn('status', ['planned', 'active'])
@@ -41,9 +43,11 @@ class EnrollmentController extends Controller
                 }
             }
 
-            return StudentEnrollment::create($data);
+            $enrollment = StudentEnrollment::create($data);
+            $audit->record('enrollment.created', $enrollment, [], $enrollment->toArray());
+
+            return $enrollment;
         });
-        $audit->record('enrollment.created', $enrollment, [], $enrollment->toArray());
 
         return redirect()->route('students.show', $enrollment->student_id)->with('success', 'Enrollment added.');
     }

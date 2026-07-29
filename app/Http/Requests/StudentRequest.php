@@ -17,13 +17,18 @@ class StudentRequest extends FormRequest
 
     public function rules(): array
     {
+        $student = $this->route('student');
+        $statuses = $student?->status === 'archived'
+            ? ['archived']
+            : ['active', 'inactive'];
+
         return [
             'first_name' => ['required', 'string', 'max:100'],
             'middle_name' => ['nullable', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'preferred_name' => ['nullable', 'string', 'max:100'],
             'user_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
-            'status' => ['sometimes', Rule::in(['active', 'inactive', 'archived'])],
+            'status' => ['sometimes', Rule::in($statuses)],
         ];
     }
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\SchoolYearRequest;
 use App\Models\SchoolYear;
+use App\Models\Tenant;
 use App\Services\AuditService;
 use App\Tenancy\TenantContext;
 use Illuminate\Http\RedirectResponse;
@@ -30,8 +31,7 @@ class SchoolYearController extends Controller
 
     public function store(SchoolYearRequest $request, AuditService $audit): RedirectResponse
     {
-        $year = $this->persist($request->validated());
-        $audit->record('school-year.created', $year, [], $year->toArray());
+        $this->persist($request->validated(), $audit);
 
         return redirect()->route('school-years.index')->with('success', 'School year created.');
     }
@@ -45,21 +45,42 @@ class SchoolYearController extends Controller
 
     public function update(SchoolYearRequest $request, SchoolYear $schoolYear, AuditService $audit): RedirectResponse
     {
-        $before = $schoolYear->toArray();
-        $this->persist($request->validated(), $schoolYear);
-        $audit->record('school-year.updated', $schoolYear, $before, $schoolYear->fresh()->toArray());
+        $this->persist($request->validated(), $audit, $schoolYear);
 
         return redirect()->route('school-years.index')->with('success', 'School year updated.');
     }
 
-    private function persist(array $data, ?SchoolYear $year = null): SchoolYear
+    private function persist(array $data, AuditService $audit, ?SchoolYear $year = null): SchoolYear
     {
-        return DB::transaction(function () use ($data, $year) {
+        return DB::transaction(function () use ($data, $year, $audit) {
+            Tenant::query()->whereKey(app(TenantContext::class)->tenantId())->lockForUpdate()->firstOrFail();
+
             if ($data['status'] === 'active') {
-                SchoolYear::query()->where('status', 'active')->when($year, fn ($q) => $q->whereKeyNot($year->id))->lockForUpdate()->update(['status' => 'closed']);
+                $previousActiveYears = SchoolYear::query()->where('status', 'active')
+                    ->when($year, fn ($query) => $query->whereKeyNot($year->id))
+                    ->lockForUpdate()->get();
+
+                foreach ($previousActiveYears as $previousActiveYear) {
+                    $before = $previousActiveYear->toArray();
+                    $previousActiveYear->update(['status' => 'closed']);
+                    $audit->record(
+                        'school-year.closed-automatically',
+                        $previousActiveYear,
+                        $before,
+                        $previousActiveYear->fresh()->toArray(),
+                    );
+                }
             }
+
+            $before = $year?->toArray() ?? [];
             $year ??= new SchoolYear;
             $year->fill($data)->save();
+            $audit->record(
+                $before ? 'school-year.updated' : 'school-year.created',
+                $year,
+                $before,
+                $year->fresh()->toArray(),
+            );
 
             return $year;
         });
