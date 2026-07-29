@@ -235,6 +235,8 @@ class VerificationRegressionTest extends TestCase
             'end_date' => '2027-06-01',
             'timezone' => 'UTC',
             'status' => 'active',
+            'instructional_week_type' => 'five_day',
+            'instructional_weekdays' => [1, 2, 3, 4, 5],
         ])->assertRedirect();
 
         $this->assertDatabaseHas('school_years', ['id' => $oldA->id, 'status' => 'closed']);
@@ -255,6 +257,8 @@ class VerificationRegressionTest extends TestCase
             'end_date' => '2027-06-01',
             'timezone' => 'UTC',
             'status' => 'active',
+            'instructional_week_type' => 'five_day',
+            'instructional_weekdays' => [1, 2, 3, 4, 5],
         ])->assertSessionHasErrors('status')->assertSessionDoesntHaveErrors('name');
     }
 
@@ -280,6 +284,8 @@ class VerificationRegressionTest extends TestCase
                 ->has('schoolYears', 1)
                 ->where('schoolYears.0.start_date', '2026-08-12')
                 ->where('schoolYears.0.end_date', '2027-05-27')
+                ->where('schoolYears.0.instructional_weekday_label', 'Mon–Fri')
+                ->where('schoolYears.0.base_instructional_days', 207)
                 ->where('schoolYears.0.instructional_day_target', 180));
 
         $this->actingIn($owner, $tenant)->get("/school-years/{$year->id}/edit")
@@ -288,6 +294,8 @@ class VerificationRegressionTest extends TestCase
                 ->component('SchoolYears/Form')
                 ->where('schoolYear.start_date', '2026-08-12')
                 ->where('schoolYear.end_date', '2027-05-27')
+                ->where('schoolYear.instructional_weekdays', [1, 2, 3, 4, 5])
+                ->where('schoolYear.base_instructional_days', 207)
                 ->where('schoolYear.instructional_day_target', 180));
 
         $this->assertEquals(
@@ -308,6 +316,8 @@ class VerificationRegressionTest extends TestCase
             'end_date' => '2027-05-27',
             'timezone' => 'America/Chicago',
             'status' => 'draft',
+            'instructional_week_type' => 'five_day',
+            'instructional_weekdays' => [1, 2, 3, 4, 5],
             'instructional_day_target' => '180',
         ])->assertRedirect(route('school-years.index'));
 

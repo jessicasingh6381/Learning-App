@@ -55,7 +55,15 @@ class PlatformFoundationTest extends TestCase
         [$user, $tenant] = $this->owner();
         $this->asTenant($user, $tenant)->post('/school-years', ['name' => 'Bad', 'start_date' => '2027-06-01', 'end_date' => '2026-08-01', 'timezone' => 'America/Chicago', 'status' => 'draft'])->assertSessionHasErrors('end_date');
         foreach ([2026, 2027] as $year) {
-            $this->asTenant($user, $tenant)->post('/school-years', ['name' => (string) $year, 'start_date' => "{$year}-08-01", 'end_date' => ($year + 1).'-06-01', 'timezone' => 'America/Chicago', 'status' => 'active']);
+            $this->asTenant($user, $tenant)->post('/school-years', [
+                'name' => (string) $year,
+                'start_date' => "{$year}-08-01",
+                'end_date' => ($year + 1).'-06-01',
+                'timezone' => 'America/Chicago',
+                'status' => 'active',
+                'instructional_week_type' => 'five_day',
+                'instructional_weekdays' => [1, 2, 3, 4, 5],
+            ]);
         }
         $this->assertSame(1, SchoolYear::withoutGlobalScopes()->where('tenant_id', $tenant->id)->where('status', 'active')->count());
         $this->assertDatabaseHas('school_years', ['name' => '2026', 'status' => 'closed']);
