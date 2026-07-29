@@ -98,6 +98,18 @@ Deploy source and Composer production dependencies, configure the web root to `p
 - Calendar values are stored as date-only fields. They represent the tenant's stated calendar dates and do not undergo server-timezone conversion.
 - Final-owner checks run in transactions and at model boundaries. A tenant with memberships cannot be deleted directly.
 
+## Student access and portal
+
+Student academic profiles remain independent of authentication accounts. Creating a student or enrollment never creates a login. An authorized owner, administrator, or teacher may explicitly enable access from the student page, which transactionally creates one username-only user, links it to the profile, creates an active Student membership in the same tenant, and writes credential-free audit records. The same link survives later school-year enrollments.
+
+Students sign in through the shared **Email or username** field. Adult email authentication remains supported. Student usernames are trimmed and normalized to lowercase at request and model boundaries, restricted to 3–40 safe characters, checked against reserved names, and stored under a unique index. Student email is genuinely nullable; fake email addresses are not generated. MariaDB's case-insensitive application collation and normalized lowercase storage enforce the same uniqueness rule, while SQLite tests exercise the normalized unique value.
+
+Temporary passwords are hashed with Laravel and normally require a first-login change. Until that change succeeds, the student can reach only the password-change route or log out. Adult-managed password resets set the requirement again and invalidate the student's other database sessions and remember token. Username-only students recover access through an authorized adult; the email reset flow remains for adults.
+
+The student portal lives under `/student` with Home, My Learning, Profile, and password-change routes. Middleware derives the student exclusively from the authenticated user, verifies the linked profile, active Student membership, active tenant, enabled timestamp, and active student state, then establishes the tenant context. Student-linked users are rejected before all administrative and tenant-switching routes. The portal exposes only the student's own safe profile fields and active enrollment. My Learning is an honest placeholder; no curriculum, lesson, assignment, submission, mastery, gradebook, attendance, standards, district-calendar, or AI feature is implemented.
+
+Disabling access deactivates the Student membership, invalidates sessions, and preserves the user, username, student profile, enrollments, and history. Re-enabling restores the same Student membership and account. Generic member management cannot change a linked student's role; student lifecycle changes use the dedicated access screen. Linking arbitrary existing users is intentionally deferred.
+
 ## Deferred work
 
 Invitations and member onboarding, custom tenant grade levels, district/calendar providers, TEKS and other standards, curriculum versioning, lessons and practice, submissions, mastery, gradebook, attendance, reports, portfolios, files, platform-admin UI, and AI tutoring are later milestones.

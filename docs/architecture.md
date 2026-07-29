@@ -22,7 +22,57 @@ Tenant middleware is required for every foundation route that reads or mutates t
 
 ## Students and user accounts
 
-`students` are academic profiles, not authentication identities. A student requires only basic name fields and a status; email and password are not collected. `user_id` is optional and may reference only an active member of the same tenant. Active, inactive, and archived states are explicit. Ordinary editing can select active or inactive; archival is a distinct confirmed action that records `archived_at` and never deletes enrollment history. Preferred name is used for ordinary display when present, while legal first and last names remain stored.
+`students` are academic profiles, not authentication identities. A student requires only basic name fields and a status; email and password are not collected. Creating an academic profile or enrollment never creates a user. Grade, school year, and academic history remain on enrollments, not users.
+
+`students.user_id` is an optional one-to-one link to a dedicated student-authentication user. A unique index prevents one user from linking to multiple profiles, the scalar field prevents a profile from holding multiple users, and a composite foreign key requires the linked user to have a membership in the same tenant. The access workflow creates the user, Student membership, link, enable timestamp, and audits in one transaction under row locks. An audit or constraint failure rolls back every step. Broad existing-user search and arbitrary linking are deferred.
+
+The same linked account remains across all future school-year enrollments. Student access enablement is an explicit capability and is never inferred from enrollment. Active, inactive, and archived academic states remain distinct. Ordinary editing cannot manipulate `user_id`; all account lifecycle changes go through the dedicated access service. Preferred name is used for ordinary display when present, while legal first and last names remain stored.
+
+### Username authentication
+
+The shared login accepts either an adult email address or a student username and always returns the same generic failure for unknown, invalid, or disabled accounts. The login value participates in the existing five-attempt rate limiter. Successful authentication regenerates the session and records `last_login_at`.
+
+Usernames are trimmed and normalized to lowercase both before validation and at the User model boundary. They are 3–40 characters and may contain only lowercase letters, numbers, periods, hyphens, and underscores. Reserved administrative or routing names are rejected. A unique database index is applied to the normalized stored value. MariaDB uses the application's case-insensitive `utf8mb4_unicode_ci` collation; SQLite test compatibility comes from storing only normalized lowercase values before the portable unique constraint is evaluated.
+
+Adult email remains required in registration and profile editing. The database column is nullable only so dedicated student accounts can use username-only authentication. Fake student email addresses are prohibited. Laravel's ordinary email reset remains available to adults; adult-managed reset is the recovery path for a username-only student.
+
+### Password and access lifecycle
+
+Enable access accepts a confirmed temporary password, hashes it with Laravel, and defaults `must_change_password` to true. A student with that flag may reach only `/student/password/change` and logout. Successful change replaces the hash, clears the flag, rotates the remember token, writes a safe audit, and regenerates the current session.
+
+Authorized adults can change the normalized username, set a new confirmed temporary password, disable access, or re-enable access. Reset sets `must_change_password` again and invalidates other database sessions. Disable makes the Student membership inactive, rotates the remember token, and removes database sessions while preserving the user, username, profile link, enrollment history, and enable timestamp. Re-enable restores that same membership as Student and never creates a second user.
+
+The active/inactive Student membership is the authoritative access status. `student_access_enabled_at` records when the capability was first established and is not a competing status boolean. Generic membership editing rejects linked student accounts so roles cannot drift away from Student or bypass lifecycle audits. A directly linked student user is intentionally a dedicated identity; mixed student/administrative memberships are unsupported in this milestone, and administrative middleware blocks that user regardless of client-supplied tenant state.
+
+### Student portal isolation
+
+Student routes are `/student`, `/student/learning`, `/student/profile`, and `/student/password/change`. Their middleware resolves:
+
+```text
+authenticated user
+-> globally unique linked student profile
+-> matching active Student membership
+-> matching active tenant
+-> active academic profile and enabled timestamp
+-> active enrollment loaded through that profile
+```
+
+No student, tenant, enrollment, or school-year identifier is accepted from the browser for portal identity. Portal pages expose only name/preferred name, the student's own username, academy name, and their active enrollment's school year, grade, and status. With no active enrollment, the portal shows a setup message.
+
+All tenant administration, member management, student management, school-year management, enrollment management, profile administration, tenant onboarding, and tenant switching routes require the administrative-user middleware before tenant resolution. A linked student user receives 403 even if a membership is manipulated. Disabled or otherwise stale student sessions fail the portal middleware, are logged out, and receive the generic login failure.
+
+### Student access auditing
+
+Credential lifecycle events are tenant-scoped and use strict allowlists:
+
+- account created and access enabled
+- username updated
+- password reset
+- password changed
+- access disabled
+- access re-enabled
+
+Only username, password-change requirement, enable timestamp, and membership role/status metadata may enter these payloads. Plaintext passwords, confirmations, hashes, remember tokens, session identifiers, and reset credentials are never supplied to the audit service.
 
 ## Grade levels
 
