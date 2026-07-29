@@ -1,18 +1,47 @@
 <script setup lang="ts">
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import {
+    useEnrollmentDateDefault,
+    type EnrollmentSchoolYear,
+} from '@/Support/enrollmentDateDefault';
 import { Head, useForm } from '@inertiajs/vue3';
 import { computed, watch } from 'vue';
 
-const props = defineProps<{ students: any[]; schoolYears: any[]; gradeLevels: any[] }>();
+interface OldInput {
+    student_id: number | null;
+    school_year_id: number | null;
+    grade_level_id: number | null;
+    enrollment_date: string | null;
+    completion_date: string | null;
+    status: string | null;
+}
+
+const props = defineProps<{
+    students: any[];
+    schoolYears: EnrollmentSchoolYear[];
+    gradeLevels: any[];
+    oldInput: OldInput | null;
+}>();
 const preset = new URLSearchParams(location.search).get('student');
 const form = useForm({
-    student_id: preset ? Number(preset) : props.students[0]?.id || '',
-    school_year_id: props.schoolYears[0]?.id || '',
-    grade_level_id: props.gradeLevels[0]?.id || '',
-    enrollment_date: new Date().toISOString().slice(0, 10),
-    completion_date: '',
-    status: 'active',
+    student_id: props.oldInput
+        ? (props.oldInput.student_id ?? '')
+        : (preset ? Number(preset) : props.students[0]?.id || ''),
+    school_year_id: props.oldInput
+        ? (props.oldInput.school_year_id ?? '')
+        : (props.schoolYears[0]?.id ?? ''),
+    grade_level_id: props.oldInput
+        ? (props.oldInput.grade_level_id ?? '')
+        : (props.gradeLevels[0]?.id ?? ''),
+    enrollment_date: props.oldInput?.enrollment_date ?? '',
+    completion_date: props.oldInput?.completion_date ?? '',
+    status: props.oldInput?.status ?? 'active',
 });
+const { markEnrollmentDateAsManual } = useEnrollmentDateDefault(
+    form,
+    props.schoolYears,
+    props.oldInput !== null,
+);
 const needsCompletionDate = computed(() => ['completed', 'withdrawn'].includes(form.status));
 watch(needsCompletionDate, (required) => {
     if (!required) form.completion_date = '';
@@ -51,7 +80,8 @@ watch(needsCompletionDate, (required) => {
                     </div>
                     <div class="col-md-4">
                         <label class="form-label" for="enrollment_date">Enrollment date</label>
-                        <input id="enrollment_date" v-model="form.enrollment_date" type="date" class="form-control">
+                        <input id="enrollment_date" v-model="form.enrollment_date" type="date" class="form-control" @input="markEnrollmentDateAsManual">
+                        <div class="form-text">Defaults to the first day of the selected school year. Change it if the student starts later.</div>
                         <div class="text-danger small">{{ form.errors.enrollment_date }}</div>
                     </div>
                     <div class="col-md-4">
