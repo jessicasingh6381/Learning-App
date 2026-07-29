@@ -43,4 +43,9 @@ class Tenant extends Model
     {
         return $this->hasMany(StudentEnrollment::class);
     }
+
+    public function academicConfigurations(): HasMany
+    {
+        return $this->hasMany(AcademicYearConfiguration::class);
+    }
 }

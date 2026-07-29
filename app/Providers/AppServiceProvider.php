@@ -2,6 +2,15 @@
 
 namespace App\Providers;
 
+use App\Models\AcademicYearConfiguration;
+use App\Models\CalendarProfile;
+use App\Models\Course;
+use App\Models\CurriculumPackage;
+use App\Models\EducationProvider;
+use App\Models\StandardsFramework;
+use App\Models\Subject;
+use App\Policies\AcademicResourcePolicy;
+use App\Policies\AcademicYearConfigurationPolicy;
 use App\Services\PermissionService;
 use App\Tenancy\TenantContext;
 use Illuminate\Support\Facades\Gate;
@@ -24,6 +33,13 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Vite::prefetch(concurrency: 3);
+        Gate::policy(EducationProvider::class, AcademicResourcePolicy::class);
+        Gate::policy(CalendarProfile::class, AcademicResourcePolicy::class);
+        Gate::policy(StandardsFramework::class, AcademicResourcePolicy::class);
+        Gate::policy(Subject::class, AcademicResourcePolicy::class);
+        Gate::policy(Course::class, AcademicResourcePolicy::class);
+        Gate::policy(CurriculumPackage::class, AcademicResourcePolicy::class);
+        Gate::policy(AcademicYearConfiguration::class, AcademicYearConfigurationPolicy::class);
         Gate::before(function ($user, string $ability) {
             if (str_contains($ability, '.')) {
                 return app(PermissionService::class)->allows($ability) ?: null;
