@@ -1,5 +1,13 @@
 <?php
 
+use App\Http\Controllers\Academic\AcademicOverviewController;
+use App\Http\Controllers\Academic\CalendarEventController;
+use App\Http\Controllers\Academic\CalendarProfileController;
+use App\Http\Controllers\Academic\CourseController;
+use App\Http\Controllers\Academic\CurriculumPackageController;
+use App\Http\Controllers\Academic\EducationProviderController;
+use App\Http\Controllers\Academic\StandardsFrameworkController;
+use App\Http\Controllers\Academic\SubjectController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EnrollmentController;
 use App\Http\Controllers\ProfileController;
@@ -47,6 +55,34 @@ Route::middleware(['auth', 'admin.user', 'tenant'])->group(function () {
     Route::post('/enrollments', [EnrollmentController::class, 'store'])->name('enrollments.store');
     Route::get('/members', [TenantMemberController::class, 'index'])->name('members.index');
     Route::patch('/members/{membership}', [TenantMemberController::class, 'update'])->name('members.update');
+
+    Route::prefix('academic-setup')->name('academic.')->group(function () {
+        Route::get('/', [AcademicOverviewController::class, 'index'])->name('overview');
+        Route::post('/configuration', [AcademicOverviewController::class, 'store'])->name('configuration.store');
+        Route::post('/configuration/copy', [AcademicOverviewController::class, 'copy'])->name('configuration.copy');
+
+        Route::resource('providers', EducationProviderController::class)
+            ->except(['show', 'destroy'])
+            ->parameters(['providers' => 'provider']);
+        Route::resource('calendars', CalendarProfileController::class)
+            ->except('destroy')
+            ->parameters(['calendars' => 'calendar']);
+        Route::post('/calendars/{calendar}/events', [CalendarEventController::class, 'store'])->name('calendars.events.store');
+        Route::patch('/calendars/{calendar}/events/{event}', [CalendarEventController::class, 'update'])->name('calendars.events.update');
+        Route::resource('standards', StandardsFrameworkController::class)
+            ->except(['show', 'destroy'])
+            ->parameters(['standards' => 'framework']);
+        Route::resource('subjects', SubjectController::class)
+            ->except(['show', 'destroy']);
+        Route::resource('courses', CourseController::class)
+            ->except(['show', 'destroy']);
+        Route::resource('curriculum', CurriculumPackageController::class)
+            ->except('destroy')
+            ->parameters(['curriculum' => 'package']);
+        Route::post('/curriculum/{package}/courses', [CurriculumPackageController::class, 'addCourse'])->name('curriculum.courses.store');
+        Route::patch('/curriculum/{package}/courses/{mapping}', [CurriculumPackageController::class, 'updateCourse'])->name('curriculum.courses.update');
+        Route::delete('/curriculum/{package}/courses/{mapping}', [CurriculumPackageController::class, 'removeCourse'])->name('curriculum.courses.destroy');
+    });
 });
 
 Route::middleware(['auth', 'student.access'])->prefix('student')->name('student.')->group(function () {
