@@ -87,6 +87,12 @@ Deploy source and Composer production dependencies, configure the web root to `p
 - Owners and administrators manage existing memberships. Adding or inviting members, acceptance tokens, and invitation email are deferred.
 - Students have legal first/last names and an optional preferred name. The preferred name is used for ordinary display when present; the legal names remain stored.
 - School-year transitions are `draft -> active|archived`, `active -> closed|archived`, and `closed -> archived`; archived is terminal. Activating a year closes the tenant's prior active year transactionally.
+- School years store their actual instructional weekdays as ascending ISO numbers (`1` Monday through `7` Sunday), rather than a restrictive four-day/five-day boolean. Five-day and four-day presets select Monday-Friday and Monday-Thursday; custom schedules can select any weekday pattern.
+- Base instructional days are calculated dynamically and inclusively from the date-only start/end values and stored weekdays. The optional instructional-day target remains a separate planning goal and is never replaced by the calculation.
+- School years store their actual instructional weekdays as ascending ISO numbers (`1` Monday through `7` Sunday), rather than a restrictive four-day/five-day boolean. Five-day and four-day presets select Monday-Friday and Monday-Thursday; custom schedules can select any weekday pattern.
+- Base instructional days are calculated dynamically and inclusively from the date-only start/end values and stored weekdays. The optional instructional-day target remains a separate planning goal and is never replaced by the calculation.
+- School years store their actual instructional weekdays as ascending ISO numbers (`1` Monday through `7` Sunday), rather than a restrictive four-day/five-day boolean. Five-day and four-day presets select Monday-Friday and Monday-Thursday; custom schedules can select any weekday pattern.
+- Base instructional days are calculated dynamically and inclusively from the date-only start/end values and stored weekdays. The optional instructional-day target remains a separate planning goal and is never replaced by the calculation.
 - One planned or active enrollment is allowed per student and school year. Completion and withdrawal dates are required for those terminal statuses and must fall within the school-year dates.
 - Dashboard active students exclude inactive/archived students; current enrollments include planned/active only; the active year has status `active`; setup indicators reflect whether those records exist. Recent audit activity is visible only to users with tenant-management permission.
 - Calendar values are stored as date-only fields. They represent the tenant's stated calendar dates and do not undergo server-timezone conversion.
@@ -95,3 +101,15 @@ Deploy source and Composer production dependencies, configure the web root to `p
 ## Deferred work
 
 Invitations and member onboarding, custom tenant grade levels, district/calendar providers, TEKS and other standards, curriculum versioning, lessons and practice, submissions, mastery, gradebook, attendance, reports, portfolios, files, platform-admin UI, and AI tutoring are later milestones.
+
+The current school-year calculation covers base instructional weekdays only. Future calendar profiles may subtract holidays, breaks, teacher workdays, staff-development days, weather closures, tenant days off, and district closures, then add instructional overrides or makeup days. No exception tables or district records are implemented yet.
+
+Schema changes for this feature are additive. Existing school-year rows retain their identifiers, tenant relationships, dates, status, timezone, and optional target; only previously absent schedule fields are backfilled to the safe five-day Monday-Friday default. Persistent development data must never be refreshed, reset, wiped, truncated, rolled back, or reseeded during ordinary verification. Automated tests are guarded to use SQLite `:memory:` only.
+
+The current school-year calculation covers base instructional weekdays only. Future calendar profiles may subtract holidays, breaks, teacher workdays, staff-development days, weather closures, tenant days off, and district closures, then add instructional overrides or makeup days. No exception tables or district records are implemented yet.
+
+Schema changes for this feature are additive. Existing school-year rows retain their identifiers, tenant relationships, dates, status, timezone, and optional target; only previously absent schedule fields are backfilled to the safe five-day Monday-Friday default. Persistent development data must never be refreshed, reset, wiped, truncated, rolled back, or reseeded during ordinary verification. Automated tests are guarded to use SQLite `:memory:` only.
+
+The current school-year calculation covers base instructional weekdays only. Future calendar profiles may subtract holidays, breaks, teacher workdays, staff-development days, weather closures, tenant days off, and district closures, then add instructional overrides or makeup days. No exception tables or district records are implemented yet.
+
+Schema changes for this feature are additive. Existing school-year rows retain their identifiers, tenant relationships, dates, status, timezone, and optional target; only previously absent schedule fields are backfilled to the safe five-day Monday-Friday default. Persistent development data must never be refreshed, reset, wiped, truncated, rolled back, or reseeded during ordinary verification. Automated tests are guarded to use SQLite `:memory:` only.

@@ -34,6 +34,42 @@ School years belong to tenants and are permanent records. Status is draft, activ
 
 Exactly one school year may be active per tenant. Activating one locks the tenant row, closes and audits the previous active year, and activates the selected record in one transaction. The tenant lock serializes competing activations. Closing or archiving never deletes enrollments or related history. Start and end values are date-only calendar fields and are not converted through the server timezone.
 
+### Weekly instructional schedules
+
+The authoritative weekly pattern is stored on each school year as a JSON array of ascending, unique ISO weekday numbers: `1` is Monday through `7` for Sunday. Storing the actual weekdays instead of an `is_four_day_week` boolean supports Monday-Friday, Monday-Thursday, Tuesday-Friday, non-contiguous schedules, weekend instruction, and other tenant-defined patterns without a schema change.
+
+`instructional_week_type` is an interface preset label with the allowlisted values `five_day`, `four_day`, and `custom`. It is not used as the calculation source. The `five_day` preset must match `[1,2,3,4,5]`; `four_day` must match `[1,2,3,4]`; custom accepts any valid non-empty pattern. The form applies preset weekdays immediately and switches to custom when a user changes a preset selection. Server validation independently rejects empty, malformed, nested, duplicate, non-integer, out-of-range, or preset-inconsistent data, and normalizes valid weekdays into ascending order before persistence.
+
+The additive schedule migration gives the type column a `five_day` default, adds the JSON column, and controlled-backfills only missing schedule fields to Monday-Friday. It does not replace school-year rows or alter identifiers, ownership, dates, timezone, status, or `instructional_day_target`. The application requires the JSON field even though it remains nullable at the database layer for portable MariaDB/SQLite migration behavior; all existing rows are backfilled and all application writes validate it.
+
+### Base instructional days
+
+`BaseInstructionalDayCalculator` dynamically counts calendar dates from `start_date` through `end_date`, inclusive, whose ISO weekday is present in `instructional_weekdays`. It operates on exact `YYYY-MM-DD` strings without UTC or browser timezone conversion. The inclusive iteration naturally handles partial weeks, month/year boundaries, and leap days. The result is exposed as `base_instructional_days` and is not persisted, avoiding stale derived data when dates or weekdays change.
+
+`instructional_day_target` remains a nullable planning goal from 1 through 366. It is displayed separately and is never inferred, overwritten, or synchronized with base days.
+
+Calendar exceptions are a future layer. Planned exception concepts include:
+
+- `holiday`
+- `break`
+- `teacher_workday`
+- `staff_development`
+- `weather_closure`
+- `instructional_makeup_day`
+- `tenant_day_off`
+- `district_closure`
+
+The future calculation boundary is:
+
+```text
+Base instructional weekdays
+minus non-instructional calendar exceptions
+plus instructional override or makeup days
+equals scheduled instructional days
+```
+
+No district profile, provider integration, calendar exception table, holiday management, closure record, or makeup-day record exists in this milestone.
+
 ## Enrollments and history
 
 An enrollment connects one tenant, student, school year, and platform grade level, with dates and planned, active, completed, withdrawn, or cancelled status. Grade progression is represented by new enrollments in later school years; no “current grade” is overwritten on the student.
