@@ -1,0 +1,12 @@
+@import "bootstrap/dist/css/bootstrap.min.css";
+
+:root { --school-blue: #24567a; --school-mint: #dff3ec; --school-ink: #24333d; }
+body { background: #f5f8fa; color: var(--school-ink); }
+.navbar-brand { font-weight: 750; letter-spacing: -.02em; }
+.page-shell { max-width: 1180px; margin: 0 auto; padding: 2rem 1rem 4rem; }
+.card { border: 0; box-shadow: 0 .2rem 1rem rgba(36, 51, 61, .07); }
+.stat-card { border-left: .3rem solid var(--school-blue); }
+.status-badge { text-transform: capitalize; }
+.empty-state { padding: 3rem 1rem; text-align: center; color: #63717a; }
+.skip-link { position: absolute; left: -9999px; }
+.skip-link:focus { left: 1rem; top: 1rem; z-index: 2000; }
