@@ -1,6 +1,6 @@
 # Learning App
 
-Learning App is a multi-tenant online learning and homeschool platform. Milestone 1 establishes secure tenant membership, students, data-driven grade levels, permanent school-year history, enrollments, member authorization, audit records, and a setup dashboard. Curriculum, standards, lessons, gradebook, attendance, and AI tutoring are intentionally deferred.
+Learning App is a multi-tenant online learning and homeschool platform. The current foundation includes secure tenant membership, students, historical enrollments and school years, student access, and a historical Academic Configuration layer for providers, calendars, standards-framework containers, subjects, courses, and versioned curriculum packages. Lesson content, assignments, gradebook, attendance, reporting, and AI tutoring are intentionally deferred.
 
 ## Technology
 
@@ -18,7 +18,7 @@ Install PHP 8.2 or later, Composer 2, Node.js with npm, Git, and MySQL/MariaDB. 
 ## Installation
 
 ```powershell
-cd C:\xampp\htdocs\Learniing-App
+cd C:\xampp\htdocs\Learning-App
 composer install
 npm install
 Copy-Item .env.example .env
@@ -46,7 +46,7 @@ For frontend development, run `npm run dev`. For a standalone PHP development se
 Point an Apache virtual host for `learning-app.test` to:
 
 ```text
-C:\xampp\htdocs\Learniing-App\public
+C:\xampp\htdocs\Learning-App\public
 ```
 
 Add `127.0.0.1 learning-app.test` to the Windows hosts file, enable Apache virtual hosts, restart Apache, and set `APP_URL=http://learning-app.test`. The document root must be `public`, never the repository root.
@@ -63,20 +63,20 @@ npm run build
 
 ## Database and seed data
 
-`php artisan migrate` creates the platform tables. `php artisan db:seed` installs stable platform grade levels from Pre-K through Grade 12 plus Ungraded. The seeder creates no demo users, families, or students.
+`php artisan migrate` creates the platform tables. `php artisan db:seed` idempotently installs stable grade levels, platform subjects, a CFISD provider reference, and a TEKS framework container. The CFISD and TEKS records contain no official calendar, pacing, curriculum, standards codes, or standards descriptions. Seeders create no demo users, families, students, courses, or tenant configurations.
 
 ## Windows/XAMPP notes
 
 - XAMPP's MariaDB client may not be on `PATH`; use `C:\xampp\mysql\bin\mysql.exe`.
 - Keep Apache's document root on `public`.
 - Ensure PHP extensions required by Laravel are enabled in XAMPP.
-- The current workspace name contains a double "i" (`Learniing-App`); the friendly hostname is unaffected.
+- The verified project path is `C:\xampp\htdocs\Learning-App`.
 
 ## Architecture summary
 
 The active tenant is a server-side session selection validated against an active membership on each tenant request. Tenant middleware runs before route model binding. Tenant-owned models receive a centralized, fail-closed global scope and automatically receive the active `tenant_id` when created. Code that genuinely needs an unscoped query must opt into Laravel's explicit `withoutGlobalScopes()` API. Policies and centralized permission mappings provide a second authorization boundary. Students are academic profiles with an optional login relationship; grade is stored on a school-year enrollment, not the student.
 
-See [Milestone 1 architecture](docs/architecture.md) for rules and decisions.
+See [Architecture](docs/architecture.md) and [Academic configuration](docs/academic-configuration.md) for rules and decisions.
 
 ## Shared hosting and cPanel
 
@@ -87,10 +87,6 @@ Deploy source and Composer production dependencies, configure the web root to `p
 - Owners and administrators manage existing memberships. Adding or inviting members, acceptance tokens, and invitation email are deferred.
 - Students have legal first/last names and an optional preferred name. The preferred name is used for ordinary display when present; the legal names remain stored.
 - School-year transitions are `draft -> active|archived`, `active -> closed|archived`, and `closed -> archived`; archived is terminal. Activating a year closes the tenant's prior active year transactionally.
-- School years store their actual instructional weekdays as ascending ISO numbers (`1` Monday through `7` Sunday), rather than a restrictive four-day/five-day boolean. Five-day and four-day presets select Monday-Friday and Monday-Thursday; custom schedules can select any weekday pattern.
-- Base instructional days are calculated dynamically and inclusively from the date-only start/end values and stored weekdays. The optional instructional-day target remains a separate planning goal and is never replaced by the calculation.
-- School years store their actual instructional weekdays as ascending ISO numbers (`1` Monday through `7` Sunday), rather than a restrictive four-day/five-day boolean. Five-day and four-day presets select Monday-Friday and Monday-Thursday; custom schedules can select any weekday pattern.
-- Base instructional days are calculated dynamically and inclusively from the date-only start/end values and stored weekdays. The optional instructional-day target remains a separate planning goal and is never replaced by the calculation.
 - School years store their actual instructional weekdays as ascending ISO numbers (`1` Monday through `7` Sunday), rather than a restrictive four-day/five-day boolean. Five-day and four-day presets select Monday-Friday and Monday-Thursday; custom schedules can select any weekday pattern.
 - Base instructional days are calculated dynamically and inclusively from the date-only start/end values and stored weekdays. The optional instructional-day target remains a separate planning goal and is never replaced by the calculation.
 - One planned or active enrollment is allowed per student and school year. Completion and withdrawal dates are required for those terminal statuses and must fall within the school-year dates.
@@ -110,18 +106,18 @@ The student portal lives under `/student` with Home, My Learning, Profile, and p
 
 Disabling access deactivates the Student membership, invalidates sessions, and preserves the user, username, student profile, enrollments, and history. Re-enabling restores the same Student membership and account. Generic member management cannot change a linked student's role; student lifecycle changes use the dedicated access screen. Linking arbitrary existing users is intentionally deferred.
 
+## Academic configuration
+
+Each tenant school year may have one `academic_year_configurations` record linking the historical year to an education provider, calendar profile, standards framework, and versioned curriculum package. Platform records have `tenant_id = null`; an explicit `ownership_key` makes shared and tenant-private uniqueness portable between MariaDB and SQLite. Scoped queries expose only active-tenant records plus deliberate platform references and fail closed without tenant context. Platform references are read-only in the tenant UI.
+
+Calendar profiles contain date-only events. Scheduled instructional days are calculated dynamically as base weekly days minus unique non-instructional dates plus unique instructional overrides. An instructional override wins a same-date conflict, then a non-instructional event, then the weekly pattern. Informational events never affect totals. Closed or archived configurations protect their calendar and curriculum history.
+
+Curriculum packages are versioned. Drafts may change course mappings; active, retired, archived, or historically referenced versions retain their meaning. Copy-prior-year creates a review-required draft, never copies enrollments or audits, never mutates the source, and omits a year-specific calendar unless it covers the entire target school year.
+
 ## Deferred work
 
-Invitations and member onboarding, custom tenant grade levels, district/calendar providers, TEKS and other standards, curriculum versioning, lessons and practice, submissions, mastery, gradebook, attendance, reports, portfolios, files, platform-admin UI, and AI tutoring are later milestones.
+Invitations and member onboarding, custom tenant grade levels, individual TEKS or other standards, official district calendars and pacing, curriculum units, lessons and practice, assignments, submissions, mastery, gradebook, attendance, reports, portfolios, files, platform-admin UI, and AI tutoring are later milestones.
 
-The current school-year calculation covers base instructional weekdays only. Future calendar profiles may subtract holidays, breaks, teacher workdays, staff-development days, weather closures, tenant days off, and district closures, then add instructional overrides or makeup days. No exception tables or district records are implemented yet.
-
-Schema changes for this feature are additive. Existing school-year rows retain their identifiers, tenant relationships, dates, status, timezone, and optional target; only previously absent schedule fields are backfilled to the safe five-day Monday-Friday default. Persistent development data must never be refreshed, reset, wiped, truncated, rolled back, or reseeded during ordinary verification. Automated tests are guarded to use SQLite `:memory:` only.
-
-The current school-year calculation covers base instructional weekdays only. Future calendar profiles may subtract holidays, breaks, teacher workdays, staff-development days, weather closures, tenant days off, and district closures, then add instructional overrides or makeup days. No exception tables or district records are implemented yet.
-
-Schema changes for this feature are additive. Existing school-year rows retain their identifiers, tenant relationships, dates, status, timezone, and optional target; only previously absent schedule fields are backfilled to the safe five-day Monday-Friday default. Persistent development data must never be refreshed, reset, wiped, truncated, rolled back, or reseeded during ordinary verification. Automated tests are guarded to use SQLite `:memory:` only.
-
-The current school-year calculation covers base instructional weekdays only. Future calendar profiles may subtract holidays, breaks, teacher workdays, staff-development days, weather closures, tenant days off, and district closures, then add instructional overrides or makeup days. No exception tables or district records are implemented yet.
+Calendar profiles now calculate scheduled days from saved non-instructional events and instructional overrides. No official CFISD calendar dates are seeded or imported.
 
 Schema changes for this feature are additive. Existing school-year rows retain their identifiers, tenant relationships, dates, status, timezone, and optional target; only previously absent schedule fields are backfilled to the safe five-day Monday-Friday default. Persistent development data must never be refreshed, reset, wiped, truncated, rolled back, or reseeded during ordinary verification. Automated tests are guarded to use SQLite `:memory:` only.

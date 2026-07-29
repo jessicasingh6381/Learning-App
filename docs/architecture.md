@@ -1,4 +1,4 @@
-# Milestone 1 Architecture
+# Learning App Architecture
 
 ## Tenant resolution and switching
 
@@ -98,7 +98,7 @@ The additive schedule migration gives the type column a `five_day` default, adds
 
 `instructional_day_target` remains a nullable planning goal from 1 through 366. It is displayed separately and is never inferred, overwritten, or synchronized with base days.
 
-Calendar exceptions are a future layer. Planned exception concepts include:
+Calendar profiles are implemented as a separate academic-configuration layer. Exception concepts include:
 
 - `holiday`
 - `break`
@@ -109,7 +109,7 @@ Calendar exceptions are a future layer. Planned exception concepts include:
 - `tenant_day_off`
 - `district_closure`
 
-The future calculation boundary is:
+The calculation boundary is:
 
 ```text
 Base instructional weekdays
@@ -118,7 +118,7 @@ plus instructional override or makeup days
 equals scheduled instructional days
 ```
 
-No district profile, provider integration, calendar exception table, holiday management, closure record, or makeup-day record exists in this milestone.
+Overlapping dates are deduplicated and instructional overrides take precedence over non-instructional events, which take precedence over the weekly schedule. The result is dynamic rather than persisted. See [Academic Configuration](academic-configuration.md) for ownership, calendar, framework, course, curriculum, configuration, copy, permission, audit, and historical-integrity rules. No official district calendar or pacing data is imported.
 
 ## Enrollments and history
 
@@ -128,11 +128,11 @@ Validation permits new enrollments only for active students and draft/active sch
 
 ## Audit logging
 
-Administrative student, school-year, enrollment, and membership changes create immutable-through-the-tenant-UI `audit_logs` with tenant, actor, action, model type/identifier, before/after values, and timestamps. Strict per-model allowlists select the small set of auditable fields; authentication secrets are never included. Audit creation occurs in the same transaction as the primary change, so an audit failure rolls back the operation. Auditing requires an explicit active tenant context rather than attributing an event to a fallback tenant.
+Administrative student, school-year, enrollment, membership, and academic-configuration changes create immutable-through-the-tenant-UI `audit_logs` with tenant, actor, action, model type/identifier, before/after values, and timestamps. Strict per-model allowlists select the small set of auditable fields; authentication secrets, arbitrary metadata, and notes are never included. Audit creation occurs in the same transaction as the primary change, so an audit failure rolls back the operation. Auditing requires an explicit active tenant context rather than attributing an event to a fallback tenant.
 
 ## Historical-data rules
 
-Students, school years, and enrollments have no ordinary destructive route. Student archival is status-based. School years are closed or archived. Foreign keys restrict deletion of academic parents. Historical enrollment rows retain the grade level that applied in that school year.
+Students, school years, enrollments, and academic configurations have no ordinary destructive route. Student archival is status-based. School years and configurations are closed or archived. Shared/tenant academic resources use lifecycle statuses, package versions, restrictive foreign keys, and draft-only mapping removal. Historical enrollment rows retain the grade level that applied in that school year.
 
 ## Test database safety
 
