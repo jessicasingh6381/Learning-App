@@ -40,6 +40,12 @@ class TenantMembershipRequest extends FormRequest
             $actor = app(TenantContext::class)->membership();
             $requestedRole = (string) $this->input('role');
 
+            if ($target->user()->first()?->student()->exists()) {
+                $validator->errors()->add('role', 'Manage linked student accounts from the student access screen.');
+
+                return;
+            }
+
             if (($target->role === 'owner' || $requestedRole === 'owner') && $actor->role !== 'owner') {
                 $validator->errors()->add('role', 'Only a tenant owner may add, remove, or modify an owner role.');
             }

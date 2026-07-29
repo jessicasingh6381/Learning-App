@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StudentRequest;
 use App\Models\Student;
+use App\Models\TenantMembership;
 use App\Services\AuditService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
@@ -43,7 +44,27 @@ class StudentController extends Controller
     {
         Gate::authorize('view', $student);
 
-        return Inertia::render('Students/Show', ['student' => $student->load('enrollments.schoolYear', 'enrollments.gradeLevel')]);
+        $access = null;
+        if ($student->user_id !== null) {
+            $user = $student->user()->firstOrFail();
+            $membership = TenantMembership::query()
+                ->where('tenant_id', $student->tenant_id)
+                ->where('user_id', $user->id)
+                ->first();
+            $access = [
+                'username' => $user->username,
+                'status' => $membership?->status === 'active' && $membership->role === 'student'
+                    ? 'active'
+                    : 'disabled',
+                'must_change_password' => $user->must_change_password,
+                'last_login_at' => $user->last_login_at?->toIso8601String(),
+            ];
+        }
+
+        return Inertia::render('Students/Show', [
+            'student' => $student->load('enrollments.schoolYear', 'enrollments.gradeLevel'),
+            'access' => $access,
+        ]);
     }
 
     public function edit(Student $student): Response

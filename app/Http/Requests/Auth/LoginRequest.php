@@ -2,10 +2,13 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\TenantMembership;
+use App\Models\User;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -28,9 +31,15 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => ['required', 'string', 'email'],
+            'login' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $login = $this->input('login', $this->input('email'));
+        $this->merge(['login' => Str::lower(trim((string) $login))]);
     }
 
     /**
@@ -42,15 +51,45 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
-            RateLimiter::hit($this->throttleKey());
+        $login = (string) $this->input('login');
+        $column = filter_var($login, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
+        $user = User::query()->where($column, $login)->first();
+        $passwordHash = $user?->password ?? Hash::make(Str::random(40));
 
-            throw ValidationException::withMessages([
-                'email' => trans('auth.failed'),
-            ]);
+        if (! $user || ! Hash::check((string) $this->input('password'), $passwordHash)) {
+            $this->failAuthentication();
         }
 
+        $student = $user->student()->first();
+        if ($student) {
+            $membership = TenantMembership::query()
+                ->with('tenant')
+                ->where('tenant_id', $student->tenant_id)
+                ->where('user_id', $user->id)
+                ->where('role', 'student')
+                ->where('status', 'active')
+                ->whereHas('tenant', fn ($query) => $query->where('status', 'active'))
+                ->first();
+
+            if (! $membership || ! $student->student_access_enabled_at || $student->status !== 'active') {
+                $this->failAuthentication();
+            }
+
+            $this->session()->put('active_tenant_id', $student->tenant_id);
+        }
+
+        Auth::login($user, $this->boolean('remember'));
+        $user->forceFill(['last_login_at' => now()])->saveQuietly();
         RateLimiter::clear($this->throttleKey());
+    }
+
+    private function failAuthentication(): never
+    {
+        RateLimiter::hit($this->throttleKey());
+
+        throw ValidationException::withMessages([
+            'login' => trans('auth.failed'),
+        ]);
     }
 
     /**
@@ -69,7 +108,7 @@ class LoginRequest extends FormRequest
         $seconds = RateLimiter::availableIn($this->throttleKey());
 
         throw ValidationException::withMessages([
-            'email' => trans('auth.throttle', [
+            'login' => trans('auth.throttle', [
                 'seconds' => $seconds,
                 'minutes' => ceil($seconds / 60),
             ]),
@@ -81,6 +120,6 @@ class LoginRequest extends FormRequest
      */
     public function throttleKey(): string
     {
-        return Str::transliterate(Str::lower($this->string('email')).'|'.$this->ip());
+        return Str::transliterate(Str::lower($this->string('login')).'|'.$this->ip());
     }
 }

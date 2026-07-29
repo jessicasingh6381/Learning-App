@@ -7,6 +7,7 @@ use App\Models\SchoolYear;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
 use App\Models\TenantMembership;
+use App\Models\User;
 use App\Tenancy\TenantContext;
 use Illuminate\Database\Eloquent\Model;
 use LogicException;
@@ -14,7 +15,8 @@ use LogicException;
 class AuditService
 {
     private const FIELDS = [
-        Student::class => ['user_id', 'first_name', 'middle_name', 'last_name', 'preferred_name', 'status', 'archived_at'],
+        Student::class => ['user_id', 'student_access_enabled_at', 'first_name', 'middle_name', 'last_name', 'preferred_name', 'status', 'archived_at'],
+        User::class => ['username', 'must_change_password', 'last_login_at'],
         SchoolYear::class => [
             'name',
             'start_date',

@@ -28,4 +28,9 @@ class StudentPolicy
     {
         return $this->create($user) && $student->tenant_id === app(TenantContext::class)->tenantId();
     }
+
+    public function manageAccess(User $user, Student $student): bool
+    {
+        return $this->update($user, $student);
+    }
 }

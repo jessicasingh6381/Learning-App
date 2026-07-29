@@ -7,8 +7,10 @@ use App\Services\TenantOwnershipService;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 
 class User extends Authenticatable
 {
@@ -28,7 +30,9 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'username',
         'password',
+        'must_change_password',
     ];
 
     /**
@@ -51,11 +55,25 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'must_change_password' => 'boolean',
+            'last_login_at' => 'datetime',
         ];
     }
 
     public function memberships(): HasMany
     {
         return $this->hasMany(TenantMembership::class);
+    }
+
+    public function student(): HasOne
+    {
+        return $this->hasOne(Student::class)->withoutGlobalScopes();
+    }
+
+    public function setUsernameAttribute(?string $username): void
+    {
+        $this->attributes['username'] = $username === null
+            ? null
+            : Str::lower(trim($username));
     }
 }

@@ -33,6 +33,14 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        if ($request->user()->student()->exists()) {
+            return redirect()->to(
+                $request->user()->must_change_password
+                    ? route('student.password.edit', absolute: false)
+                    : route('student.home', absolute: false),
+            );
+        }
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 

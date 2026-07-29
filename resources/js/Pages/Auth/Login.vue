@@ -13,7 +13,7 @@ defineProps<{
 }>();
 
 const form = useForm({
-    email: '',
+    login: '',
     password: '',
     remember: false,
 });
@@ -37,19 +37,19 @@ const submit = () => {
 
         <form @submit.prevent="submit">
             <div>
-                <InputLabel for="email" value="Email" />
+                <InputLabel for="login" value="Email or username" />
 
                 <TextInput
-                    id="email"
-                    type="email"
+                    id="login"
+                    type="text"
                     class="mb-1"
-                    v-model="form.email"
+                    v-model="form.login"
                     required
                     autofocus
                     autocomplete="username"
                 />
 
-                <InputError class="mt-2" :message="form.errors.email" />
+                <InputError class="mt-2" :message="form.errors.login" />
             </div>
 
             <div class="mt-4">
@@ -82,7 +82,7 @@ const submit = () => {
                     :href="route('password.request')"
                     class="link-secondary"
                 >
-                    Forgot your password?
+                    Adult email password reset
                 </Link>
 
                 <PrimaryButton

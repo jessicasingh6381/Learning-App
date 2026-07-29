@@ -11,11 +11,14 @@ class Student extends Model
 {
     use BelongsToTenant;
 
-    protected $fillable = ['user_id', 'first_name', 'middle_name', 'last_name', 'preferred_name', 'status', 'archived_at'];
+    protected $fillable = ['user_id', 'student_access_enabled_at', 'first_name', 'middle_name', 'last_name', 'preferred_name', 'status', 'archived_at'];
 
     protected function casts(): array
     {
-        return ['archived_at' => 'datetime'];
+        return [
+            'student_access_enabled_at' => 'datetime',
+            'archived_at' => 'datetime',
+        ];
     }
 
     public function user(): BelongsTo
