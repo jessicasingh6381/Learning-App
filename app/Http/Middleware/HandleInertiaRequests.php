@@ -37,10 +37,13 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
                 'permissions' => fn () => $request->user() && app(TenantContext::class)->hasTenant() ? app(PermissionService::class)->permissions() : [],
+                'membershipRole' => fn () => app(TenantContext::class)->hasTenant() ? app(TenantContext::class)->membership()->role : null,
             ],
             'tenant' => fn () => app(TenantContext::class)->hasTenant() ? app(TenantContext::class)->tenant() : null,
             'tenants' => fn () => $request->user() ? TenantMembership::query()->with('tenant:id,name,status')
-                ->where('user_id', $request->user()->id)->where('status', 'active')->get()->pluck('tenant')->filter()->values() : [],
+                ->where('user_id', $request->user()->id)->where('status', 'active')
+                ->whereHas('tenant', fn ($query) => $query->where('status', 'active'))
+                ->get()->pluck('tenant')->filter()->values() : [],
             'flash' => ['success' => fn () => $request->session()->get('success')],
         ];
     }

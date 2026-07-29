@@ -2,18 +2,20 @@
 
 namespace Tests;
 
+use App\Support\TestDatabaseSafety;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
-use Illuminate\Support\Facades\DB;
 
 abstract class TestCase extends BaseTestCase
 {
-    protected function setUp(): void
+    /**
+     * Run the database guard after the application is booted but before Laravel
+     * invokes RefreshDatabase, DatabaseMigrations, or DatabaseTruncation.
+     */
+    protected function setUpTraits()
     {
-        parent::setUp();
-        $connection = DB::connection();
-        $database = (string) $connection->getDatabaseName();
-        if ($connection->getDriverName() !== 'sqlite' || $database !== ':memory:') {
-            throw new \RuntimeException("Tests must use SQLite in memory; refusing database [{$database}].");
-        }
+        $connectionName = config('database.default');
+        TestDatabaseSafety::assertSafe((array) config("database.connections.{$connectionName}", []));
+
+        return parent::setUpTraits();
     }
 }

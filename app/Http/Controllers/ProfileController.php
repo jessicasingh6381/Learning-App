@@ -3,14 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
-use App\Models\TenantMembership;
+use App\Services\TenantOwnershipService;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -46,7 +44,7 @@ class ProfileController extends Controller
     /**
      * Delete the user's account.
      */
-    public function destroy(Request $request): RedirectResponse
+    public function destroy(Request $request, TenantOwnershipService $ownership): RedirectResponse
     {
         $request->validate([
             'password' => ['required', 'current_password'],
@@ -54,21 +52,9 @@ class ProfileController extends Controller
 
         $user = $request->user();
 
-        DB::transaction(function () use ($user) {
-            $owned = TenantMembership::query()->where('user_id', $user->id)->where('role', 'owner')->where('status', 'active')->lockForUpdate()->get();
-            foreach ($owned as $membership) {
-                $hasAnotherOwner = TenantMembership::query()->where('tenant_id', $membership->tenant_id)->where('user_id', '!=', $user->id)
-                    ->where('role', 'owner')->where('status', 'active')->lockForUpdate()->exists();
-                if (! $hasAnotherOwner) {
-                    throw ValidationException::withMessages(['password' => 'Transfer ownership before deleting an account that is the final active tenant owner.']);
-                }
-            }
-        });
+        $ownership->deleteUser($user);
 
-        Auth::logout();
-
-        $user->delete();
-
+        Auth::guard('web')->logoutCurrentDevice();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 

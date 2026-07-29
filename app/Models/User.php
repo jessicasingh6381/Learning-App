@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Services\TenantOwnershipService;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -13,6 +14,11 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
+
+    protected static function booted(): void
+    {
+        static::deleting(fn (User $user) => app(TenantOwnershipService::class)->assertUserDeletionRetainsOwners($user));
+    }
 
     /**
      * The attributes that are mass assignable.

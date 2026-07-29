@@ -13,9 +13,9 @@ trait BelongsToTenant
     {
         static::addGlobalScope('tenant', function (Builder $builder): void {
             $tenantId = app(TenantContext::class)->tenantId();
-            if ($tenantId !== null) {
-                $builder->where($builder->qualifyColumn('tenant_id'), $tenantId);
-            }
+            $tenantId === null
+                ? $builder->whereRaw('1 = 0')
+                : $builder->where($builder->qualifyColumn('tenant_id'), $tenantId);
         });
         static::creating(function ($model): void {
             if (app(TenantContext::class)->hasTenant()) {

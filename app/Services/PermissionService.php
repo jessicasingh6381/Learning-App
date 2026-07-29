@@ -7,9 +7,9 @@ use App\Tenancy\TenantContext;
 class PermissionService
 {
     private const PERMISSIONS = [
-        'owner' => ['tenant.manage', 'members.view', 'members.manage', 'students.view', 'students.manage', 'school-years.view', 'school-years.manage', 'enrollments.view', 'enrollments.manage'],
-        'administrator' => ['tenant.manage', 'members.view', 'members.manage', 'students.view', 'students.manage', 'school-years.view', 'school-years.manage', 'enrollments.view', 'enrollments.manage'],
-        'teacher' => ['students.view', 'students.manage', 'school-years.view', 'enrollments.view', 'enrollments.manage'],
+        'owner' => ['dashboard.view', 'tenant.manage', 'members.view', 'members.manage', 'students.view', 'students.manage', 'school-years.view', 'school-years.manage', 'enrollments.view', 'enrollments.manage'],
+        'administrator' => ['dashboard.view', 'tenant.manage', 'members.view', 'members.manage', 'students.view', 'students.manage', 'school-years.view', 'school-years.manage', 'enrollments.view', 'enrollments.manage'],
+        'teacher' => ['dashboard.view', 'students.view', 'students.manage', 'school-years.view', 'enrollments.view', 'enrollments.manage'],
         'parent' => ['students.view', 'school-years.view', 'enrollments.view'],
         'tutor' => ['students.view', 'school-years.view', 'enrollments.view'],
         'student' => [],
