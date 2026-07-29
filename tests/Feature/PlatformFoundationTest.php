@@ -67,7 +67,7 @@ class PlatformFoundationTest extends TestCase
         $student = $tenant->students()->create(['first_name' => 'Kai', 'last_name' => 'Learner', 'status' => 'active']);
         foreach ([2026 => 'G5', 2027 => 'G6'] as $year => $gradeCode) {
             $schoolYear = $tenant->schoolYears()->create(['name' => (string) $year, 'start_date' => "{$year}-08-01", 'end_date' => ($year + 1).'-06-01', 'timezone' => 'America/Chicago', 'status' => 'draft']);
-            $this->asTenant($user, $tenant)->post('/enrollments', ['student_id' => $student->id, 'school_year_id' => $schoolYear->id, 'grade_level_id' => GradeLevel::where('code', $gradeCode)->value('id'), 'enrollment_date' => "{$year}-08-01", 'status' => 'completed'])->assertRedirect();
+            $this->asTenant($user, $tenant)->post('/enrollments', ['student_id' => $student->id, 'school_year_id' => $schoolYear->id, 'grade_level_id' => GradeLevel::where('code', $gradeCode)->value('id'), 'enrollment_date' => "{$year}-08-01", 'completion_date' => ($year + 1).'-05-31', 'status' => 'completed'])->assertRedirect();
         }
         $this->assertSame(2, StudentEnrollment::withoutGlobalScopes()->where('student_id', $student->id)->distinct()->count('grade_level_id'));
     }
