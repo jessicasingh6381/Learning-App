@@ -32,6 +32,20 @@ External links open with `noopener`, `noreferrer`, and `nofollow`. They are disp
 
 A reviewed calendar-category source may create an empty draft calendar covering the selected school year. A reviewed curriculum, pacing, or scope-and-sequence source may create an empty draft curriculum package. A reviewed course-guide or curriculum source may create a draft course from adult-entered required fields. Every draft is linked back to the source and audited. These actions do not extract dates, events, courses, units, lessons, standards, or other source content, and they do not activate the result.
 
+### Calendar source workflow
+
+The Academic Setup overview treats calendar evidence and calendar configuration as separate states:
+
+- **Missing:** no related source and no compatible selected profile.
+- **Source available:** one or more related sources exist, but no structured profile is available from the source.
+- **Draft profile available:** a source-linked draft covers the school year but has not been selected.
+- **Profile available:** another compatible draft or active profile exists but is not selected.
+- **Complete:** the configuration selects an authorized draft or active profile covering the school year and matching the configured provider.
+
+Exactly one related source links directly to its detail page; multiple sources link to the library filtered by calendar category, school year, and provider when selected. An unreviewed source explains that review is required. After review, an authorized adult may create an empty draft using the source title, provider, academic-year label, school-year date range, timezone, source URL, and a provenance note. The action links the profile to the source and redirects to the profile with instructions to add events and return to Academic Setup. It never parses the PDF or creates holiday, closure, break, or instructional dates.
+
+PDF file versions have an authenticated inline-view route in addition to secure download. It reuses tenant-scoped source binding and download authorization, verifies the file belongs to the source, checks storage existence, and permits only the PDF MIME/extension pair. Responses use `application/pdf`, inline disposition, and `X-Content-Type-Options: nosniff`; private paths are never returned. DOCX, XLSX, CSV, TXT, images, and other formats remain download-only. No public storage URL is created.
+
 Academic Setup reports related active-source counts for calendar, curriculum, and course areas. Counts are informational evidence and remain separate from the existing completion checklist, whose meaning is still based on configured structured records.
 
 ## Authorization

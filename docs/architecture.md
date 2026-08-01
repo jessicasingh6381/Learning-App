@@ -132,6 +132,8 @@ Administrative student, school-year, enrollment, membership, and academic-config
 
 Academic source records use the same tenant scope and audit boundary. Source URL values, private disk paths, generated filenames, descriptions, and notes are deliberately excluded from audit payloads. File audits retain only safe provenance metadata such as version, original filename, detected MIME, size, and checksum. See [Academic Sources](academic-sources.md).
 
+Calendar setup state is derived rather than persisted. A source-only state means evidence exists but no source-linked Calendar Profile has been created. A source-linked draft or another compatible unselected profile is availability, not completion. Completion requires the academic-year configuration to select a tenant-visible draft or active profile that covers the full school-year range and does not conflict with its selected provider. Removing or invalidating the selection makes the step incomplete again. Draft profiles may be selected while the configuration remains draft under the existing lifecycle rules.
+
 ## Historical-data rules
 
 Students, school years, enrollments, and academic configurations have no ordinary destructive route. Student archival is status-based. School years and configurations are closed or archived. Shared/tenant academic resources use lifecycle statuses, package versions, restrictive foreign keys, and draft-only mapping removal. Historical enrollment rows retain the grade level that applied in that school year.
