@@ -158,9 +158,13 @@ Students, school years, enrollments, and academic configurations have no ordinar
 
 PHPUnit forces SQLite in memory. After the application boots but before Laravel invokes `RefreshDatabase`, migration, or truncation traits, the base test class stops immediately unless the active driver is SQLite and the database name is exactly `:memory:`. Missing and malformed configuration also fails closed. Tenant-isolation, role denial, switching, last-owner protection, school-year activation, enrollment uniqueness, and archival-history tests run through HTTP routes and database assertions.
 
-## Dashboard rules
+## Parent/Teacher Workspace rules
 
-Dashboard queries always use the active tenant context. Active-student count includes only `active` students. Current-enrollment count includes only `planned` and `active` enrollments. Active school year means status `active`. Setup indicators report the existence of a school year, student, and current enrollment under those same definitions. Recent audit activity is tenant-scoped and is returned only to owners and administrators with `tenant.manage`.
+Adult users with `workspace.view` land on the friendly workspace Home. Every summary query uses the active tenant context. Active student summaries include only active profiles and select planned or active enrollment for the active school year. Dates cross the Inertia boundary as exact `YYYY-MM-DD` values and are formatted without JavaScript `Date` timezone conversion.
+
+`WorkspaceSummaryService` is the presentation boundary for Home, Learning Plan, and friendly Calendar. It reads the active academic-year configuration, checks selected-calendar compatibility, and delegates totals and single-day status to `ScheduledInstructionalDayCalculator`. Saved Calendar Events are never inferred. The optional instructional-day target remains visibly separate from calculated scheduled days and is never changed by a workspace read.
+
+Student Portal continues to use its isolated layout and middleware. Advanced Academic Setup remains the technical configuration area. Its navigation entry requires `advanced-academic.view`; route authorization inside that area continues to use the existing granular academic permissions. See [Parent/Teacher Workspace](parent-teacher-workspace.md).
 
 ## Membership onboarding
 
