@@ -176,6 +176,7 @@ describe('Academic setup UI', () => {
                 source: { id: 4, title: 'Calendar reference', description: 'Official page reference', source_kind: 'url', source_category: 'calendar', authority_level: 'official_provider', review_status: 'reviewed', processing_status: 'not_requested', source_url: 'https://example.edu/calendar', publication_date: '2026-07-01', version_label: '2026', academic_year_label: '2026-2027', notes: '', archived_at: null, education_provider_id: 1, education_provider: { name: 'Provider' }, school_year: { name: '2026-2027' }, grade_level: null, files: [] },
                 links: [], linkChoices: { school_year: [] },
                 courseChoices: { subjects: [], gradeLevels: [], providers: [], frameworks: [] },
+                courseDefaults: { subject_id: null, standards_framework_id: null, education_provider_id: 1, minimum_grade_level_id: null, maximum_grade_level_id: null, name: 'Calendar reference', description: 'Draft created from reviewed academic source: Calendar reference.' },
                 permissions: { manage: true, review: true, download: true }, reviewTransitions: ['rejected', 'archived'],
             },
             global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub } },

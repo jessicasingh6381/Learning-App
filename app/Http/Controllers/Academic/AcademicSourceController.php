@@ -151,6 +151,15 @@ class AcademicSourceController extends Controller
             }),
             'linkChoices' => $this->linkChoices(),
             'courseChoices' => $this->courseChoices(),
+            'courseDefaults' => [
+                'subject_id' => $source->links->firstWhere('link_type', 'subject')?->link_id,
+                'standards_framework_id' => $source->links->firstWhere('link_type', 'standards_framework')?->link_id,
+                'education_provider_id' => $source->education_provider_id,
+                'minimum_grade_level_id' => $source->grade_level_id,
+                'maximum_grade_level_id' => $source->grade_level_id,
+                'name' => $source->title,
+                'description' => 'Draft created from reviewed academic source: '.$source->title.'.',
+            ],
             'permissions' => [
                 'manage' => Gate::allows('update', $source),
                 'review' => Gate::allows('review', $source),
