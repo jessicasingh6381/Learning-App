@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Academic;
 
+use App\Domain\Calendars\CalendarProfileCompatibility;
 use App\Domain\Calendars\ScheduledInstructionalDayCalculator;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AcademicYearConfigurationRequest;
 use App\Http\Requests\CopyAcademicConfigurationRequest;
 use App\Models\AcademicSource;
+use App\Models\AcademicSourceLink;
 use App\Models\AcademicYearConfiguration;
 use App\Models\CalendarProfile;
 use App\Models\CurriculumPackage;
@@ -25,8 +27,11 @@ use Inertia\Response;
 
 class AcademicOverviewController extends Controller
 {
-    public function index(Request $request, ScheduledInstructionalDayCalculator $calculator): Response
-    {
+    public function index(
+        Request $request,
+        ScheduledInstructionalDayCalculator $calculator,
+        CalendarProfileCompatibility $calendarCompatibility,
+    ): Response {
         Gate::authorize('academic-config.view');
         $schoolYears = SchoolYear::query()->orderByDesc('start_date')->get();
         $schoolYear = $schoolYears->firstWhere('id', $request->integer('school_year_id'))
@@ -45,6 +50,44 @@ class AcademicOverviewController extends Controller
             )
             : null;
         $mappedCourses = $configuration?->curriculumPackage?->courseMappings->count() ?? 0;
+        $calendarSources = $schoolYear ? AcademicSource::query()
+            ->with('currentFile')
+            ->whereNull('archived_at')
+            ->where('source_category', 'calendar')
+            ->where(function ($query) use ($schoolYear) {
+                $query->where('school_year_id', $schoolYear->id)
+                    ->orWhereHas('links', fn ($links) => $links
+                        ->where('link_type', 'school_year')
+                        ->where('link_id', $schoolYear->id));
+            })
+            ->latest('updated_at')
+            ->get() : collect();
+        $eligibleCalendars = $schoolYear ? CalendarProfile::query()
+            ->whereIn('status', ['draft', 'active'])
+            ->whereDate('start_date', '<=', $schoolYear->start_date->format('Y-m-d'))
+            ->whereDate('end_date', '>=', $schoolYear->end_date->format('Y-m-d'))
+            ->when($configuration?->education_provider_id, fn ($query, $providerId) => $query
+                ->where(fn ($providers) => $providers->whereNull('education_provider_id')->orWhere('education_provider_id', $providerId)))
+            ->get() : collect();
+        $linkedCalendarIds = $calendarSources->isEmpty() ? collect() : AcademicSourceLink::query()
+            ->whereIn('academic_source_id', $calendarSources->pluck('id'))
+            ->where('link_type', 'calendar_profile')
+            ->pluck('link_id');
+        $linkedCalendars = $eligibleCalendars->whereIn('id', $linkedCalendarIds);
+        $calendarComplete = $schoolYear && $configuration?->calendarProfile
+            ? $calendarCompatibility->supports(
+                $configuration->calendarProfile,
+                $schoolYear,
+                $configuration->education_provider_id,
+            )
+            : false;
+        $calendarState = match (true) {
+            $calendarComplete => 'complete',
+            $linkedCalendars->where('status', 'draft')->isNotEmpty() => 'draft_profile_available',
+            $eligibleCalendars->isNotEmpty() => 'profile_available',
+            $calendarSources->isNotEmpty() => 'source_available',
+            default => 'missing',
+        };
         $sourceCounts = $schoolYear ? collect([
             'calendar' => ['calendar'],
             'curriculum' => ['curriculum', 'pacing', 'scope_and_sequence'],
@@ -79,15 +122,30 @@ class AcademicOverviewController extends Controller
             'summary' => $summary,
             'mappedCourseCount' => $mappedCourses,
             'sourceCounts' => $sourceCounts,
+            'calendarSetup' => [
+                'state' => $calendarState,
+                'source_count' => $calendarSources->count(),
+                'profile_count' => $eligibleCalendars->count(),
+                'linked_profile_count' => $linkedCalendars->count(),
+                'can_view_sources' => app(PermissionService::class)->allows('academic-sources.view'),
+                'can_create_source' => app(PermissionService::class)->allows('academic-sources.create'),
+                'single_source' => $calendarSources->count() === 1 ? $calendarSources->first()->only([
+                    'id', 'title', 'review_status', 'source_kind',
+                ]) : null,
+                'can_create_profile' => $calendarSources->count() === 1
+                    && $calendarSources->first()->review_status === 'reviewed'
+                    && $linkedCalendarIds->isEmpty()
+                    && app(PermissionService::class)->allows('calendars.manage'),
+            ],
             'checklist' => [
                 'school_year' => $schoolYear !== null,
                 'provider' => $configuration?->education_provider_id !== null,
-                'calendar' => $configuration?->calendar_profile_id !== null,
+                'calendar' => $calendarComplete,
                 'standards' => $configuration?->standards_framework_id !== null,
                 'curriculum' => $configuration?->curriculum_package_id !== null,
                 'courses' => $mappedCourses > 0,
             ],
-            'choices' => $this->choices(),
+            'choices' => $this->choices($schoolYear, $configuration?->education_provider_id),
             'canManage' => app(PermissionService::class)->allows('academic-config.manage'),
         ]);
     }
@@ -186,11 +244,18 @@ class AcademicOverviewController extends Controller
             ->with('success', $message);
     }
 
-    private function choices(): array
+    private function choices(?SchoolYear $schoolYear, ?int $educationProviderId): array
     {
         return [
             'providers' => EducationProvider::query()->where('status', 'active')->orderBy('name')->get(['id', 'name', 'tenant_id']),
-            'calendars' => CalendarProfile::query()->whereIn('status', ['draft', 'active'])->orderByDesc('start_date')->get(['id', 'name', 'start_date', 'end_date', 'tenant_id']),
+            'calendars' => CalendarProfile::query()
+                ->whereIn('status', ['draft', 'active'])
+                ->when($schoolYear, fn ($query) => $query
+                    ->whereDate('start_date', '<=', $schoolYear->start_date->format('Y-m-d'))
+                    ->whereDate('end_date', '>=', $schoolYear->end_date->format('Y-m-d')))
+                ->when($educationProviderId, fn ($query) => $query
+                    ->where(fn ($providers) => $providers->whereNull('education_provider_id')->orWhere('education_provider_id', $educationProviderId)))
+                ->orderByDesc('start_date')->get(['id', 'name', 'start_date', 'end_date', 'status', 'tenant_id']),
             'frameworks' => StandardsFramework::query()->whereIn('status', ['draft', 'active'])->orderBy('name')->get(['id', 'name', 'version_label', 'tenant_id']),
             'packages' => CurriculumPackage::query()->whereIn('status', ['draft', 'active'])->orderByDesc('created_at')->get(['id', 'name', 'version_label', 'status', 'tenant_id']),
         ];

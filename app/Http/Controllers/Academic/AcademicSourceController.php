@@ -71,6 +71,7 @@ class AcademicSourceController extends Controller
         return Inertia::render('Academic/Sources/Index', [
             'sources' => $sources,
             'filters' => $filters,
+            'filterSummary' => $this->filterSummary($filters),
             'options' => $this->formOptions(),
             'canCreate' => Gate::allows('create', AcademicSource::class),
         ]);
@@ -136,7 +137,10 @@ class AcademicSourceController extends Controller
     public function show(AcademicSource $source, AcademicSourceLinkService $links): Response
     {
         Gate::authorize('view', $source);
-        $source->load(['educationProvider:id,name', 'schoolYear:id,name,start_date,end_date,timezone', 'gradeLevel:id,name', 'files', 'links']);
+        $source->load(['educationProvider:id,name', 'schoolYear:id,name,start_date,end_date,timezone', 'gradeLevel:id,name', 'files', 'currentFile', 'links']);
+        $linkedCalendars = CalendarProfile::query()
+            ->whereIn('id', $source->links->where('link_type', 'calendar_profile')->pluck('link_id'))
+            ->get(['id', 'name', 'status']);
 
         return Inertia::render('Academic/Sources/Show', [
             'source' => $source,
@@ -166,6 +170,12 @@ class AcademicSourceController extends Controller
                 'download' => Gate::allows('download', $source),
             ],
             'reviewTransitions' => AcademicSourceOptions::REVIEW_TRANSITIONS[$source->review_status] ?? [],
+            'calendarSetup' => [
+                'is_calendar' => $source->source_category === 'calendar',
+                'linked_profiles' => $linkedCalendars,
+                'current_file_is_pdf' => $source->currentFile?->mime_type === 'application/pdf'
+                    && $source->currentFile?->extension === 'pdf',
+            ],
         ]);
     }
 
@@ -274,6 +284,25 @@ class AcademicSourceController extends Controller
         );
     }
 
+    public function viewFile(
+        AcademicSource $source,
+        AcademicSourceFile $file,
+        AuditService $audit,
+    ): StreamedResponse {
+        Gate::authorize('download', $source);
+        abort_unless($file->academic_source_id === $source->id, 404);
+        abort_unless($file->mime_type === 'application/pdf' && $file->extension === 'pdf', 415);
+        abort_unless(Storage::disk($file->disk)->exists($file->stored_path), 404);
+        $audit->record('academic-source.file-viewed', $file);
+
+        return Storage::disk($file->disk)->response(
+            $file->stored_path,
+            $file->original_filename,
+            ['Content-Type' => 'application/pdf', 'X-Content-Type-Options' => 'nosniff'],
+            'inline',
+        );
+    }
+
     public function addLink(
         AcademicSourceLinkRequest $request,
         AcademicSource $source,
@@ -303,6 +332,9 @@ class AcademicSourceController extends Controller
     {
         Gate::authorize('calendars.manage');
         $this->assertReviewedCategory($source, ['calendar']);
+        if ($source->links()->where('link_type', 'calendar_profile')->exists()) {
+            throw ValidationException::withMessages(['review_status' => 'This source is already linked to a Calendar Profile.']);
+        }
         $year = $source->schoolYear;
         if (! $year) {
             throw ValidationException::withMessages(['school_year_id' => 'Select a school year before creating a calendar draft.']);
@@ -328,7 +360,10 @@ class AcademicSourceController extends Controller
             return $calendar;
         });
 
-        return redirect()->route('academic.calendars.show', $calendar)->with('success', 'Draft calendar created. Add events manually after reviewing the source.');
+        return redirect()->route('academic.calendars.show', $calendar)->with(
+            'success',
+            'Draft Calendar Profile created from the source. Add calendar events, then select this profile in Academic Setup.',
+        );
     }
 
     public function createCurriculum(AcademicSource $source, AcademicSourceLinkService $links, AuditService $audit): RedirectResponse
@@ -423,6 +458,24 @@ class AcademicSourceController extends Controller
             'providers' => EducationProvider::query()->where('status', 'active')->orderBy('name')->get(['id', 'name', 'tenant_id']),
             'frameworks' => StandardsFramework::query()->where('status', 'active')->orderBy('name')->get(['id', 'name', 'tenant_id']),
         ];
+    }
+
+    private function filterSummary(array $filters): ?string
+    {
+        if (($filters['category'] ?? null) !== 'calendar') {
+            return null;
+        }
+
+        $year = isset($filters['school_year_id'])
+            ? SchoolYear::query()->find((int) $filters['school_year_id'])
+            : null;
+        $provider = isset($filters['education_provider_id'])
+            ? EducationProvider::query()->find((int) $filters['education_provider_id'])
+            : null;
+
+        return 'Calendar sources'
+            .($year ? ' for '.$year->name : '')
+            .($provider ? ' · '.$provider->name : '');
     }
 
     private function modelLabel(Model $model): string

@@ -12,10 +12,14 @@ const props = withDefaults(defineProps<{
     summary: any | null;
     mappedCourseCount: number;
     sourceCounts?: Record<string, number>;
+    calendarSetup?: any;
     checklist: Record<string, boolean>;
     choices: Record<string, any[]>;
     canManage: boolean;
-}>(), { sourceCounts: () => ({ calendar: 0, curriculum: 0, courses: 0 }) });
+}>(), {
+    sourceCounts: () => ({ calendar: 0, curriculum: 0, courses: 0 }),
+    calendarSetup: () => ({ state: 'missing', source_count: 0, profile_count: 0, linked_profile_count: 0, single_source: null, can_view_sources: false, can_create_source: false, can_create_profile: false }),
+});
 
 const form = useForm<any>({
     school_year_id: props.schoolYear?.id ?? null,
@@ -36,7 +40,17 @@ const copyForm = useForm({
     source_school_year_id: null as number | null,
     target_school_year_id: props.schoolYear?.id ?? null,
 });
+const calendarDraftForm = useForm({});
 const completeCount = computed(() => Object.values(props.checklist).filter(Boolean).length);
+const calendarStatusLabels: Record<string, string> = {
+    missing: 'Missing', source_available: 'Source available', draft_profile_available: 'Draft profile available',
+    profile_available: 'Profile available', complete: 'Complete',
+};
+const calendarStatusLabel = computed(() => calendarStatusLabels[String(props.calendarSetup.state)] ?? 'Missing');
+const calendarSourceFilters = computed(() => ({
+    category: 'calendar', school_year_id: props.schoolYear?.id,
+    education_provider_id: props.configuration?.education_provider_id ?? undefined,
+}));
 const selectYear = (event: Event) => {
     const value = (event.target as HTMLSelectElement).value;
     router.get(route('academic.overview'), { school_year_id: value }, { preserveState: false });
@@ -109,9 +123,24 @@ const selectYear = (event: Event) => {
                             <ul class="list-group list-group-flush">
                                 <li v-for="(complete, item) in checklist" :key="item" class="list-group-item px-0">
                                     <div class="d-flex justify-content-between">
-                                        <span class="text-capitalize">{{ item.replace('_', ' ') }}</span><span :class="complete ? 'text-success' : 'text-secondary'">{{ complete ? 'Complete' : 'Missing' }}</span>
+                                        <span class="text-capitalize">{{ item.replace('_', ' ') }}</span><span :class="complete ? 'text-success' : (item === 'calendar' && calendarSetup.state !== 'missing' ? 'text-primary' : 'text-secondary')">{{ item === 'calendar' ? calendarStatusLabel : (complete ? 'Complete' : 'Missing') }}</span>
                                     </div>
-                                    <div v-if="['calendar', 'curriculum', 'courses'].includes(String(item))" class="small text-secondary mt-1">
+                                    <div v-if="item === 'calendar'" class="small mt-1">
+                                        <template v-if="calendarSetup.state === 'complete'">A compatible Calendar Profile is selected.</template>
+                                        <template v-else-if="calendarSetup.state === 'draft_profile_available'">A source-linked draft profile is ready. Add events if needed, then select it above.</template>
+                                        <template v-else-if="calendarSetup.state === 'profile_available'">A compatible Calendar Profile exists but is not selected. Select it above to complete this step.</template>
+                                        <template v-else-if="calendarSetup.state === 'source_available'">A source is available to review, but no structured Calendar Profile exists yet.</template>
+                                        <template v-else>No Calendar Profile or related source is available yet.</template>
+                                        <div class="text-secondary mt-1">{{ calendarSetup.source_count }} related source{{ calendarSetup.source_count === 1 ? '' : 's' }}</div>
+                                        <div v-if="!complete && (calendarSetup.can_view_sources || canManage)" class="d-flex flex-wrap gap-2 mt-2 align-items-center">
+                                            <Link v-if="calendarSetup.source_count === 0 && calendarSetup.can_create_source" :href="route('academic.sources.create', { category: 'calendar', school_year_id: schoolYear.id, education_provider_id: configuration?.education_provider_id })">Add source</Link>
+                                            <Link v-else-if="calendarSetup.single_source" :href="route('academic.sources.show', calendarSetup.single_source.id)">{{ calendarSetup.single_source.review_status === 'reviewed' ? 'View source' : 'Review source' }}</Link>
+                                            <Link v-else :href="route('academic.sources.index', calendarSourceFilters)">View sources</Link>
+                                            <button v-if="calendarSetup.can_create_profile" type="button" class="btn btn-sm btn-outline-primary" :disabled="calendarDraftForm.processing" @click="calendarDraftForm.post(route('academic.sources.draft-calendar', calendarSetup.single_source.id))">{{ calendarDraftForm.processing ? 'Creating…' : 'Create calendar profile' }}</button>
+                                            <a v-if="calendarSetup.profile_count > 0" href="#calendar_profile_id">Select calendar profile</a>
+                                        </div>
+                                    </div>
+                                    <div v-else-if="['curriculum', 'courses'].includes(String(item))" class="small text-secondary mt-1">
                                         {{ sourceCounts[String(item)] ?? 0 }} related source{{ (sourceCounts[String(item)] ?? 0) === 1 ? '' : 's' }}
                                         <Link v-if="!complete && canManage" class="ms-1" :href="route('academic.sources.create', { category: item === 'courses' ? 'course_guide' : item, school_year_id: schoolYear.id })">Add source</Link>
                                     </div>

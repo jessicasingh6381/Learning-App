@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Domain\Calendars\CalendarProfileCompatibility;
 use App\Http\Requests\Concerns\ValidatesAcademicOwnership;
 use App\Models\AcademicYearConfiguration;
 use App\Models\CalendarProfile;
@@ -56,13 +57,14 @@ class AcademicYearConfigurationRequest extends FormRequest
                 $schoolYear = SchoolYear::query()->find($this->integer('school_year_id'));
                 $calendar = CalendarProfile::query()->find($this->integer('calendar_profile_id'));
 
-                if ($schoolYear && $calendar && (
-                    $calendar->start_date->format('Y-m-d') > $schoolYear->start_date->format('Y-m-d')
-                    || $calendar->end_date->format('Y-m-d') < $schoolYear->end_date->format('Y-m-d')
+                if ($schoolYear && $calendar && ! app(CalendarProfileCompatibility::class)->supports(
+                    $calendar,
+                    $schoolYear,
+                    $this->integer('education_provider_id') ?: null,
                 )) {
                     $validator->errors()->add(
                         'calendar_profile_id',
-                        'The calendar profile must cover the complete school-year date range.',
+                        'Select a draft or active calendar profile that covers the full school year and matches the configured provider.',
                     );
                 }
             },

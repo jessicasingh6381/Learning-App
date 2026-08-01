@@ -66,6 +66,7 @@ Route::middleware(['auth', 'admin.user', 'tenant'])->group(function () {
         Route::patch('/sources/{source}/review', [AcademicSourceController::class, 'review'])->name('sources.review');
         Route::patch('/sources/{source}/archive', [AcademicSourceController::class, 'archive'])->name('sources.archive');
         Route::post('/sources/{source}/files', [AcademicSourceController::class, 'replaceFile'])->name('sources.files.store');
+        Route::get('/sources/{source}/files/{file}/view', [AcademicSourceController::class, 'viewFile'])->name('sources.files.view');
         Route::get('/sources/{source}/files/{file}/download', [AcademicSourceController::class, 'download'])->name('sources.files.download');
         Route::post('/sources/{source}/links', [AcademicSourceController::class, 'addLink'])->name('sources.links.store');
         Route::delete('/sources/{source}/links/{link}', [AcademicSourceController::class, 'removeLink'])->name('sources.links.destroy');

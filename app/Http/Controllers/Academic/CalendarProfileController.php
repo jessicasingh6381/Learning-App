@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Academic;
 use App\Domain\Calendars\ScheduledInstructionalDayCalculator;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CalendarProfileRequest;
+use App\Models\AcademicSourceLink;
 use App\Models\AcademicYearConfiguration;
 use App\Models\CalendarProfile;
 use App\Models\EducationProvider;
@@ -22,11 +23,16 @@ class CalendarProfileController extends Controller
     public function index(): Response
     {
         Gate::authorize('calendars.view');
+        $calendars = CalendarProfile::query()->with('educationProvider:id,name')->withCount('events')
+            ->orderByDesc('start_date')->get();
+        $sourceLinks = $this->sourceLinks($calendars->pluck('id')->all());
 
         return Inertia::render('Academic/Calendars/Index', [
-            'calendars' => CalendarProfile::query()->with('educationProvider:id,name')->withCount('events')
-                ->orderByDesc('start_date')->get()
-                ->map(fn ($calendar) => [...$calendar->toArray(), 'is_shared' => $calendar->isShared()]),
+            'calendars' => $calendars->map(fn ($calendar) => [
+                ...$calendar->toArray(),
+                'is_shared' => $calendar->isShared(),
+                'linked_sources' => $sourceLinks->get($calendar->id, collect())->values(),
+            ]),
         ]);
     }
 
@@ -52,6 +58,7 @@ class CalendarProfileController extends Controller
     {
         Gate::authorize('view', $calendar);
         $calendar->load(['events', 'educationProvider:id,name']);
+        $linkedSources = $this->sourceLinks([$calendar->id])->get($calendar->id, collect())->values();
 
         $summaries = SchoolYear::query()->orderByDesc('start_date')->get()->map(function (SchoolYear $year) use ($calendar, $calculator) {
             $summary = $calculator->summarize(
@@ -61,12 +68,20 @@ class CalendarProfileController extends Controller
                 $calendar->events,
             );
 
-            return ['school_year_id' => $year->id, 'school_year_name' => $year->name, ...$summary];
+            return [
+                'school_year_id' => $year->id,
+                'school_year_name' => $year->name,
+                'compatible' => in_array($calendar->status, ['draft', 'active'], true)
+                    && $calendar->start_date->format('Y-m-d') <= $year->start_date->format('Y-m-d')
+                    && $calendar->end_date->format('Y-m-d') >= $year->end_date->format('Y-m-d'),
+                ...$summary,
+            ];
         });
 
         return Inertia::render('Academic/Calendars/Show', [
             'calendar' => [...$calendar->toArray(), 'is_shared' => $calendar->isShared()],
             'summaries' => $summaries,
+            'linkedSources' => $linkedSources,
         ]);
     }
 
@@ -106,5 +121,21 @@ class CalendarProfileController extends Controller
     private function providers()
     {
         return EducationProvider::query()->where('status', 'active')->orderBy('name')->get(['id', 'name', 'tenant_id']);
+    }
+
+    private function sourceLinks(array $calendarIds)
+    {
+        return AcademicSourceLink::query()
+            ->with('source:id,title,review_status')
+            ->where('link_type', 'calendar_profile')
+            ->whereIn('link_id', $calendarIds)
+            ->get()
+            ->map(fn ($link) => [
+                'id' => $link->source->id,
+                'calendar_profile_id' => $link->link_id,
+                'title' => $link->source->title,
+                'review_status' => $link->source->review_status,
+            ])
+            ->groupBy('calendar_profile_id');
     }
 }

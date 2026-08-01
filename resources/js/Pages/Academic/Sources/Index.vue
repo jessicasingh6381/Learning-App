@@ -4,7 +4,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import { reactive } from 'vue';
 
-const props = defineProps<{ sources: any; filters: Record<string, any>; options: Record<string, any[]>; canCreate: boolean }>();
+const props = defineProps<{ sources: any; filters: Record<string, any>; filterSummary?: string | null; options: Record<string, any[]>; canCreate: boolean }>();
 const filters = reactive({
     search: props.filters.search ?? '', category: props.filters.category ?? '', kind: props.filters.kind ?? '',
     review_status: props.filters.review_status ?? '', school_year_id: props.filters.school_year_id ?? '',
@@ -20,7 +20,7 @@ const clear = () => router.get(route('academic.sources.index'));
     <Head title="Academic Sources" />
     <AuthenticatedLayout>
         <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-            <div><h1 class="h2 mb-1">Academic sources</h1><p class="text-secondary mb-0">Private uploads, references, and source review history.</p></div>
+            <div><h1 class="h2 mb-1">{{ filterSummary ?? 'Academic sources' }}</h1><p class="text-secondary mb-0">Private uploads, references, and source review history.</p></div>
             <Link v-if="canCreate" class="btn btn-primary" :href="route('academic.sources.create')">Add source</Link>
         </div>
         <AcademicNav />
