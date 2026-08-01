@@ -36,6 +36,8 @@ The Calendar Profile detail page always includes a Source documents subsection. 
 
 Unlinked, active calendar sources are suggested only when their tenant visibility, provider, and covered school year are compatible with the profile. Linking is an explicit audited action through `academic_source_links`; it does not alter review state, copy metadata into the profile, overwrite `calendar_profiles.source_url`, create Calendar Events, or change scheduled totals. Conversely, editing or removing the direct profile URL leaves all managed source links intact. Both provenance forms may coexist, and neither is required for Calendar completion.
 
+Calendar Profile archival and restoration preserve every Academic Source link. Archived profiles are read-only, so sources cannot be linked or unlinked until the profile is restored to Draft. A profile with any source link is never eligible for permanent deletion; the source must be explicitly unlinked first. Deleting an eligible, unlinked profile never deletes or archives an Academic Source or file version.
+
 ## Review and structured drafts
 
 A reviewed calendar-category source may create an empty draft calendar covering the selected school year. A reviewed curriculum, pacing, or scope-and-sequence source may create an empty draft curriculum package. A reviewed course-guide or curriculum source may create a draft course from adult-entered required fields. Every draft is linked back to the source and audited. These actions do not extract dates, events, courses, units, lessons, standards, or other source content, and they do not activate the result.
