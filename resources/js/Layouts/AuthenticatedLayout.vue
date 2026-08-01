@@ -19,6 +19,7 @@ const can = (permission: string) => page.props.auth.permissions?.includes(permis
                         <button class="nav-link dropdown-toggle" type="button" data-bs-toggle="dropdown" :aria-expanded="false">Academic setup</button>
                         <ul class="dropdown-menu">
                             <li><Link class="dropdown-item" :href="route('academic.overview')">Overview</Link></li>
+                            <li><Link class="dropdown-item" :href="route('academic.sources.index')">Sources</Link></li>
                             <li><Link class="dropdown-item" :href="route('academic.providers.index')">Providers</Link></li>
                             <li><Link class="dropdown-item" :href="route('academic.calendars.index')">Calendars</Link></li>
                             <li><Link class="dropdown-item" :href="route('academic.standards.index')">Standards</Link></li>

@@ -2,19 +2,20 @@
 import AcademicNav from '@/Components/AcademicNav.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { formatDateOnly } from '@/Support/dateOnly';
-import { Head, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
     schoolYears: any[];
     schoolYear: any | null;
     configuration: any | null;
     summary: any | null;
     mappedCourseCount: number;
+    sourceCounts?: Record<string, number>;
     checklist: Record<string, boolean>;
     choices: Record<string, any[]>;
     canManage: boolean;
-}>();
+}>(), { sourceCounts: () => ({ calendar: 0, curriculum: 0, courses: 0 }) });
 
 const form = useForm<any>({
     school_year_id: props.schoolYear?.id ?? null,
@@ -106,8 +107,14 @@ const selectYear = (event: Event) => {
                             <h2 class="h5">Setup status</h2>
                             <p>{{ completeCount }} of {{ Object.keys(checklist).length }} steps complete</p>
                             <ul class="list-group list-group-flush">
-                                <li v-for="(complete, item) in checklist" :key="item" class="list-group-item px-0 d-flex justify-content-between">
-                                    <span class="text-capitalize">{{ item.replace('_', ' ') }}</span><span :class="complete ? 'text-success' : 'text-secondary'">{{ complete ? 'Complete' : 'Missing' }}</span>
+                                <li v-for="(complete, item) in checklist" :key="item" class="list-group-item px-0">
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-capitalize">{{ item.replace('_', ' ') }}</span><span :class="complete ? 'text-success' : 'text-secondary'">{{ complete ? 'Complete' : 'Missing' }}</span>
+                                    </div>
+                                    <div v-if="['calendar', 'curriculum', 'courses'].includes(String(item))" class="small text-secondary mt-1">
+                                        {{ sourceCounts[String(item)] ?? 0 }} related source{{ (sourceCounts[String(item)] ?? 0) === 1 ? '' : 's' }}
+                                        <Link v-if="!complete && canManage" class="ms-1" :href="route('academic.sources.create', { category: item === 'courses' ? 'course_guide' : item, school_year_id: schoolYear.id })">Add source</Link>
+                                    </div>
                                 </li>
                             </ul>
                         </div>

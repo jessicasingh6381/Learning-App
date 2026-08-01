@@ -3,6 +3,7 @@ import { Link } from '@inertiajs/vue3';
 
 const items = [
     ['academic.overview', 'Overview'],
+    ['academic.sources.*', 'Sources'],
     ['academic.providers.*', 'Providers'],
     ['academic.calendars.*', 'Calendars'],
     ['academic.standards.*', 'Standards'],

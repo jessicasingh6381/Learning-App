@@ -6,6 +6,7 @@ use App\Domain\Calendars\ScheduledInstructionalDayCalculator;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AcademicYearConfigurationRequest;
 use App\Http\Requests\CopyAcademicConfigurationRequest;
+use App\Models\AcademicSource;
 use App\Models\AcademicYearConfiguration;
 use App\Models\CalendarProfile;
 use App\Models\CurriculumPackage;
@@ -44,6 +45,19 @@ class AcademicOverviewController extends Controller
             )
             : null;
         $mappedCourses = $configuration?->curriculumPackage?->courseMappings->count() ?? 0;
+        $sourceCounts = $schoolYear ? collect([
+            'calendar' => ['calendar'],
+            'curriculum' => ['curriculum', 'pacing', 'scope_and_sequence'],
+            'courses' => ['course_guide', 'curriculum'],
+        ])->map(fn (array $categories) => AcademicSource::query()
+            ->whereNull('archived_at')
+            ->whereIn('source_category', $categories)
+            ->where(function ($query) use ($schoolYear) {
+                $query->where('school_year_id', $schoolYear->id)
+                    ->orWhereHas('links', fn ($links) => $links
+                        ->where('link_type', 'school_year')
+                        ->where('link_id', $schoolYear->id));
+            })->count())->all() : ['calendar' => 0, 'curriculum' => 0, 'courses' => 0];
 
         return Inertia::render('Academic/Overview', [
             'schoolYears' => $schoolYears->map(fn ($year) => [
@@ -64,6 +78,7 @@ class AcademicOverviewController extends Controller
             'configuration' => $configuration,
             'summary' => $summary,
             'mappedCourseCount' => $mappedCourses,
+            'sourceCounts' => $sourceCounts,
             'checklist' => [
                 'school_year' => $schoolYear !== null,
                 'provider' => $configuration?->education_provider_id !== null,
