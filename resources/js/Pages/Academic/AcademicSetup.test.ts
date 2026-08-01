@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import CalendarShow from './Calendars/Show.vue';
 import CalendarsIndex from './Calendars/Index.vue';
+import CalendarForm from './Calendars/Form.vue';
 import CurriculumShow from './Curriculum/Show.vue';
 import Overview from './Overview.vue';
 import ProvidersIndex from './Providers/Index.vue';
@@ -228,6 +229,21 @@ describe('Academic setup UI', () => {
         const viewSources = multiple.findAll('a').find((link) => link.text() === 'View sources');
         expect(viewSources?.attributes('href')).toContain('category');
         expect(viewSources?.attributes('href')).toContain('school_year_id');
+
+        const provenance = mount(Overview, {
+            props: {
+                ...base,
+                configuration: { ...base.configuration, calendar_profile_id: 4 },
+                sourceCounts: { calendar: 1, curriculum: 0, courses: 0 },
+                checklist: { ...base.checklist, calendar: true },
+                calendarSetup: { state: 'complete', source_count: 1, profile_count: 1, linked_profile_count: 0, selected_profile_id: 4, selected_profile_has_source_website: true, unlinked_source_count: 1, single_source: { id: 7 }, can_view_sources: true, can_create_source: true, can_create_profile: false },
+            },
+            global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub } },
+        });
+        expect(provenance.text()).toContain('Profile available with a source website. One related source document is not linked.');
+        expect(provenance.text()).toContain('View profile');
+        expect(provenance.text()).toContain('Link source');
+        expect(provenance.text()).toContain('Complete');
     });
 
     it('routes multiple calendar sources to a filtered library summary', () => {
@@ -266,13 +282,13 @@ describe('Academic setup UI', () => {
     it('shows draft Calendar Profiles and their linked source in the Calendars tab', () => {
         state.permissions = ['calendars.view', 'calendars.manage'];
         const wrapper = mount(CalendarsIndex, {
-            props: { calendars: [{ id: 4, name: 'Calendar PDF', academic_year_label: '2026-2027', start_date: '2026-08-12', end_date: '2027-05-27', status: 'draft', events_count: 0, is_shared: false, education_provider: { name: 'CFISD' }, linked_sources: [{ id: 9, title: 'Calendar PDF source' }] }] },
+            props: { calendars: [{ id: 4, name: 'Calendar PDF', academic_year_label: '2026-2027', start_date: '2026-08-12', end_date: '2027-05-27', status: 'draft', events_count: 0, is_shared: false, has_source_website: true, education_provider: { name: 'CFISD' }, linked_sources: [{ id: 9, title: 'Calendar PDF source' }] }] },
             global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub, OwnershipBadge: true } },
         });
         expect(wrapper.text()).toContain('Calendar PDF');
         expect(wrapper.text()).toContain('draft');
-        expect(wrapper.text()).toContain('1 linked source');
-        expect(wrapper.text()).toContain('Calendar PDF source');
+        expect(wrapper.text()).toContain('Source website · 1 linked document');
+        expect(wrapper.text()).not.toContain('https://');
         expect(wrapper.text()).toContain('0');
     });
 
@@ -298,14 +314,16 @@ describe('Academic setup UI', () => {
             props: {
                 calendar: {
                     id: 1, name: 'Custom Calendar', start_date: '2026-08-12', end_date: '2027-05-27',
-                    timezone: 'America/Chicago', is_shared: false,
+                    timezone: 'America/Chicago', is_shared: false, academic_year_label: '2026-2027', status: 'draft', education_provider: null,
                     events: [
                         { id: 1, name: 'Holiday', event_date: '2026-09-07', end_date: null, event_type: 'holiday', instructional_effect: 'non_instructional', status: 'active' },
                         { id: 2, name: 'Fall break', event_date: '2026-11-23', end_date: '2026-11-27', event_type: 'break', instructional_effect: 'non_instructional', status: 'active' },
                     ],
                 },
                 summaries: [{ school_year_id: 1, school_year_name: '2026-2027', compatible: true, base_days: 207, removed_days: 6, added_days: 1, scheduled_days: 202 }],
-                linkedSources: [{ id: 9, title: 'Calendar PDF source' }],
+                linkedSources: [{ id: 9, link_id: 3, title: 'Calendar PDF source', source_kind: 'upload', source_category: 'calendar', authority_level: 'official_provider', review_status: 'reviewed', current_file: null, external_url: null, can_manage: true, can_download: true }],
+                suggestedSources: [],
+                sourceWebsite: null,
             },
             global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub } },
         });
@@ -314,10 +332,61 @@ describe('Academic setup UI', () => {
         expect(wrapper.text()).toContain('Instructional override');
         expect(wrapper.text()).toContain('207');
         expect(wrapper.text()).toContain('202');
-        expect(wrapper.text()).toContain('Use in Academic Setup for 2026-2027');
-        expect(wrapper.text()).toContain('View source: Calendar PDF source');
+        expect(wrapper.text()).toContain('Use in Academic Setup');
+        expect(wrapper.text()).toContain('Calendar PDF source');
         expect(wrapper.get('#event-name').attributes('aria-describedby')).toBeUndefined();
         expect(wrapper.get('#event-end').attributes('type')).toBe('date');
+    });
+
+    it('renders direct source metadata and a linked PDF as separate provenance', () => {
+        state.permissions = ['calendars.view', 'calendars.manage'];
+        const wrapper = mount(CalendarShow, {
+            props: {
+                calendar: { id: 1, name: 'CFISD Calendar', academic_year_label: '2026-2027', start_date: '2026-08-12', end_date: '2027-05-29', timezone: 'America/Chicago', status: 'active', source_version: 'Revision 1', education_provider: { id: 1, name: 'CFISD' }, is_shared: false, events: [] },
+                sourceWebsite: { url: 'https://www.cfisd.net/calendar', domain: 'www.cfisd.net' },
+                summaries: [{ school_year_id: 1, school_year_name: '2026-2027', compatible: true, base_days: 207, removed_days: 0, added_days: 0, scheduled_days: 207 }],
+                linkedSources: [{ id: 2, link_id: 8, title: 'District calendar PDF', source_kind: 'upload', source_category: 'calendar', authority_level: 'official_provider', review_status: 'unreviewed', external_url: null, current_file: { id: 4, original_filename: 'calendar.pdf', is_pdf: true }, can_manage: true, can_download: true }],
+                suggestedSources: [],
+            },
+            global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub, OwnershipBadge: true, CalendarEventRow: true } },
+        });
+        expect(wrapper.text()).toContain('Source information');
+        expect(wrapper.text()).toContain('Open source website');
+        expect(wrapper.text()).toContain('Source version: Revision 1');
+        expect(wrapper.text()).toContain('Source documents');
+        expect(wrapper.text()).toContain('District calendar PDF');
+        expect(wrapper.text()).toContain('View PDF');
+        expect(wrapper.text()).toContain('Download');
+        const external = wrapper.get('a[href="https://www.cfisd.net/calendar"]');
+        expect(external.attributes('target')).toBe('_blank');
+        expect(external.attributes('rel')).toBe('noopener noreferrer');
+    });
+
+    it('always renders source-document empty states and hides adult source controls from read-only UI', () => {
+        state.permissions = ['calendars.view'];
+        const wrapper = mount(CalendarShow, {
+            props: {
+                calendar: { id: 1, name: 'Calendar', academic_year_label: '', start_date: '2026-08-12', end_date: '2027-05-27', timezone: 'America/Chicago', status: 'draft', source_version: null, education_provider: null, is_shared: false, events: [] },
+                sourceWebsite: null, summaries: [], linkedSources: [], suggestedSources: [],
+            },
+            global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub, OwnershipBadge: true } },
+        });
+        expect(wrapper.text()).toContain('No direct source URL has been recorded.');
+        expect(wrapper.text()).toContain('No source documents are linked to this Calendar Profile.');
+        expect(wrapper.text()).not.toContain('Source version:');
+        expect(wrapper.text()).not.toContain('Edit source information');
+        expect(wrapper.text()).not.toContain('Link existing source');
+        expect(wrapper.text()).not.toContain('Add new source');
+    });
+
+    it('explains that direct URLs and uploaded source documents are managed separately', () => {
+        const wrapper = mount(CalendarForm, {
+            props: { providers: [], defaults: { timezone: 'America/Chicago' } },
+            global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub } },
+        });
+        expect(wrapper.text()).toContain('Official webpage or reference URL');
+        expect(wrapper.text()).toContain('Upload PDFs and other files through the Academic Source Library');
+        expect(wrapper.text()).toContain('Optional version or publication label');
     });
 
     it('supports empty package state and disables mapping changes outside drafts', () => {
