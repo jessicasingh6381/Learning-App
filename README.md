@@ -76,7 +76,7 @@ npm run build
 
 The active tenant is a server-side session selection validated against an active membership on each tenant request. Tenant middleware runs before route model binding. Tenant-owned models receive a centralized, fail-closed global scope and automatically receive the active `tenant_id` when created. Code that genuinely needs an unscoped query must opt into Laravel's explicit `withoutGlobalScopes()` API. Policies and centralized permission mappings provide a second authorization boundary. Students are academic profiles with an optional login relationship; grade is stored on a school-year enrollment, not the student.
 
-See [Architecture](docs/architecture.md) and [Academic configuration](docs/academic-configuration.md) for rules and decisions.
+See [Architecture](docs/architecture.md), [Academic configuration](docs/academic-configuration.md), and [Academic sources](docs/academic-sources.md) for rules and decisions.
 
 ## Shared hosting and cPanel
 
@@ -119,5 +119,11 @@ Curriculum packages are versioned. Drafts may change course mappings; active, re
 Invitations and member onboarding, custom tenant grade levels, individual TEKS or other standards, official district calendars and pacing, curriculum units, lessons and practice, assignments, submissions, mastery, gradebook, attendance, reports, portfolios, files, platform-admin UI, and AI tutoring are later milestones.
 
 Calendar profiles now calculate scheduled days from saved non-instructional events and instructional overrides. No official CFISD calendar dates are seeded or imported.
+
+## Academic source library
+
+Authorized adults can preserve uploaded documents, external URL references, and manual source notes in a tenant-private academic source library. Uploads use generated server filenames on Laravel's private local disk, retain every replacement version, and store original filename, detected MIME type, size, and SHA-256 checksum. Downloads pass through tenant-scoped authorization; no public storage link is used.
+
+URL records are store-only. The application validates an external HTTP(S) address and does not fetch, scrape, parse, or follow it. Review states and explicit links to controlled academic record types establish provenance. A reviewed source may create an empty calendar, curriculum-package, or course draft for adult completion, but no content is extracted or published automatically. Source counts on Academic Setup are evidence indicators and never make a configuration step complete.
 
 Schema changes for this feature are additive. Existing school-year rows retain their identifiers, tenant relationships, dates, status, timezone, and optional target; only previously absent schedule fields are backfilled to the safe five-day Monday-Friday default. Persistent development data must never be refreshed, reset, wiped, truncated, rolled back, or reseeded during ordinary verification. Automated tests are guarded to use SQLite `:memory:` only.

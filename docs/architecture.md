@@ -130,6 +130,8 @@ Validation permits new enrollments only for active students and draft/active sch
 
 Administrative student, school-year, enrollment, membership, and academic-configuration changes create immutable-through-the-tenant-UI `audit_logs` with tenant, actor, action, model type/identifier, before/after values, and timestamps. Strict per-model allowlists select the small set of auditable fields; authentication secrets, arbitrary metadata, and notes are never included. Audit creation occurs in the same transaction as the primary change, so an audit failure rolls back the operation. Auditing requires an explicit active tenant context rather than attributing an event to a fallback tenant.
 
+Academic source records use the same tenant scope and audit boundary. Source URL values, private disk paths, generated filenames, descriptions, and notes are deliberately excluded from audit payloads. File audits retain only safe provenance metadata such as version, original filename, detected MIME, size, and checksum. See [Academic Sources](academic-sources.md).
+
 ## Historical-data rules
 
 Students, school years, enrollments, and academic configurations have no ordinary destructive route. Student archival is status-based. School years and configurations are closed or archived. Shared/tenant academic resources use lifecycle statuses, package versions, restrictive foreign keys, and draft-only mapping removal. Historical enrollment rows retain the grade level that applied in that school year.
