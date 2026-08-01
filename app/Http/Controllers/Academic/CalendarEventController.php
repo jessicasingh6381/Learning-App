@@ -15,6 +15,12 @@ class CalendarEventController extends Controller
 {
     public function store(CalendarEventRequest $request, CalendarProfile $calendar, AuditService $audit): RedirectResponse
     {
+        if ($calendar->status === 'archived') {
+            throw ValidationException::withMessages([
+                'name' => 'Restore this Calendar Profile before adding events.',
+            ]);
+        }
+
         if ($this->isHistorical($calendar)) {
             throw ValidationException::withMessages([
                 'name' => 'Events cannot be added to a calendar used by a closed or archived configuration.',
@@ -34,6 +40,12 @@ class CalendarEventController extends Controller
         AuditService $audit,
     ): RedirectResponse {
         abort_unless($event->calendar_profile_id === $calendar->id, 404);
+
+        if ($calendar->status === 'archived') {
+            throw ValidationException::withMessages([
+                'name' => 'Restore this Calendar Profile before changing events.',
+            ]);
+        }
 
         if ($this->isHistorical($calendar)) {
             throw ValidationException::withMessages([

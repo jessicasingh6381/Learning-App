@@ -319,6 +319,14 @@ class AcademicSourceController extends Controller
     {
         Gate::authorize('update', $source);
         abort_unless($link->academic_source_id === $source->id, 404);
+        if ($link->link_type === 'calendar_profile') {
+            $calendar = CalendarProfile::query()->find($link->link_id);
+            if ($calendar?->status === 'archived') {
+                throw ValidationException::withMessages([
+                    'link_id' => 'Restore this Calendar Profile before unlinking source documents.',
+                ]);
+            }
+        }
         $before = $link->toArray();
         DB::transaction(function () use ($link, $audit, $before) {
             $audit->record('academic-source.unlinked', $link, $before, []);

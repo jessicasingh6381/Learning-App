@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Academic;
 
+use App\Domain\Calendars\CalendarProfileLifecycleService;
 use App\Domain\Calendars\ScheduledInstructionalDayCalculator;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CalendarProfileRequest;
@@ -15,6 +16,7 @@ use App\Services\AuditService;
 use App\Support\SafeExternalUrl;
 use App\Tenancy\TenantContext;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -22,10 +24,14 @@ use Inertia\Response;
 
 class CalendarProfileController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request, CalendarProfileLifecycleService $lifecycle): Response
     {
         Gate::authorize('calendars.view');
+        $filters = $request->validate(['show' => ['nullable', 'in:active,archived,all']]);
+        $show = $filters['show'] ?? 'active';
         $calendars = CalendarProfile::query()->with('educationProvider:id,name')->withCount('events')
+            ->when($show === 'active', fn ($query) => $query->whereIn('status', ['draft', 'active']))
+            ->when($show === 'archived', fn ($query) => $query->where('status', 'archived'))
             ->orderByDesc('start_date')->get();
         $sourceLinks = $this->sourceLinks($calendars->pluck('id')->all());
 
@@ -42,7 +48,9 @@ class CalendarProfileController extends Controller
                 'is_shared' => $calendar->isShared(),
                 'has_source_website' => SafeExternalUrl::inspect($calendar->source_url) !== null,
                 'linked_sources' => $sourceLinks->get($calendar->id, collect())->values(),
+                'lifecycle' => $lifecycle->inspect($calendar),
             ]),
+            'filters' => ['show' => $show],
         ]);
     }
 
@@ -64,8 +72,11 @@ class CalendarProfileController extends Controller
         return redirect()->route('academic.calendars.show', $calendar)->with('success', 'Calendar profile created.');
     }
 
-    public function show(CalendarProfile $calendar, ScheduledInstructionalDayCalculator $calculator): Response
-    {
+    public function show(
+        CalendarProfile $calendar,
+        ScheduledInstructionalDayCalculator $calculator,
+        CalendarProfileLifecycleService $lifecycle,
+    ): Response {
         Gate::authorize('view', $calendar);
         $calendar->load(['events', 'educationProvider:id,name']);
         $linkedSources = $this->sourceLinks([$calendar->id])->get($calendar->id, collect())->values();
@@ -110,12 +121,14 @@ class CalendarProfileController extends Controller
             'summaries' => $summaries,
             'linkedSources' => $linkedSources,
             'suggestedSources' => $suggestedSources,
+            'lifecycle' => $lifecycle->inspect($calendar),
         ]);
     }
 
     public function edit(CalendarProfile $calendar): Response
     {
         Gate::authorize('update', $calendar);
+        abort_if($calendar->status === 'archived', 409, 'Restore this Calendar Profile before editing it.');
 
         return Inertia::render('Academic/Calendars/Form', [
             'calendar' => $calendar,
@@ -125,6 +138,7 @@ class CalendarProfileController extends Controller
 
     public function update(CalendarProfileRequest $request, CalendarProfile $calendar, AuditService $audit): RedirectResponse
     {
+        abort_if($calendar->status === 'archived', 409, 'Restore this Calendar Profile before editing it.');
         $data = $request->validated();
         $protected = AcademicYearConfiguration::query()
             ->where('calendar_profile_id', $calendar->id)
@@ -144,6 +158,31 @@ class CalendarProfileController extends Controller
         $audit->record('calendar-profile.updated', $calendar, $before, $calendar->fresh()->toArray());
 
         return redirect()->route('academic.calendars.show', $calendar)->with('success', 'Calendar profile updated.');
+    }
+
+    public function archive(CalendarProfile $calendar, CalendarProfileLifecycleService $lifecycle): RedirectResponse
+    {
+        Gate::authorize('update', $calendar);
+        $lifecycle->archive($calendar);
+
+        return redirect()->route('academic.calendars.index')->with('success', 'Calendar Profile archived. Events, source documents, and history were preserved.');
+    }
+
+    public function restore(CalendarProfile $calendar, CalendarProfileLifecycleService $lifecycle): RedirectResponse
+    {
+        Gate::authorize('update', $calendar);
+        $lifecycle->restore($calendar);
+
+        return redirect()->route('academic.calendars.show', $calendar)->with('success', 'Calendar Profile restored to Draft.');
+    }
+
+    public function destroy(Request $request, CalendarProfile $calendar, CalendarProfileLifecycleService $lifecycle): RedirectResponse
+    {
+        Gate::authorize('update', $calendar);
+        $request->validate(['confirmation' => ['required', 'in:DELETE']]);
+        $name = $lifecycle->deletePermanently($calendar);
+
+        return redirect()->route('academic.calendars.index')->with('success', $name.' was permanently deleted.');
     }
 
     private function providers()

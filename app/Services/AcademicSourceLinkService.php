@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Domain\AcademicSources\AcademicSourceOptions;
 use App\Models\AcademicSource;
 use App\Models\AcademicSourceLink;
+use App\Models\CalendarProfile;
 use App\Models\GradeLevel;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Validation\ValidationException;
@@ -33,8 +34,12 @@ class AcademicSourceLinkService
 
     public function add(AcademicSource $source, string $type, int $id, AuditService $audit): AcademicSourceLink
     {
-        if (! $this->resolves($type, $id)) {
+        $target = $this->resolve($type, $id);
+        if (! $target) {
             throw ValidationException::withMessages(['link_id' => 'The selected academic record is not available.']);
+        }
+        if ($target instanceof CalendarProfile && $target->status === 'archived') {
+            throw ValidationException::withMessages(['link_id' => 'Restore this Calendar Profile before linking source documents.']);
         }
 
         $link = $source->links()->firstOrCreate(['link_type' => $type, 'link_id' => $id]);

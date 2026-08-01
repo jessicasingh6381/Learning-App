@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import AcademicNav from '@/Components/AcademicNav.vue';
 import CalendarEventRow from '@/Components/CalendarEventRow.vue';
+import CalendarLifecycleActions from '@/Components/CalendarLifecycleActions.vue';
 import OwnershipBadge from '@/Components/OwnershipBadge.vue';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { formatDateOnly } from '@/Support/dateOnly';
-import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
 const props = defineProps<{
@@ -13,8 +14,9 @@ const props = defineProps<{
     summaries: any[];
     linkedSources?: any[];
     suggestedSources?: any[];
+    lifecycle: any;
 }>();
-const canManage = usePage<any>().props.auth.permissions.includes('calendars.manage') && !props.calendar.is_shared;
+const canManage = props.lifecycle.can_edit;
 const form = useForm({ event_date: '', end_date: '', event_type: 'holiday', name: '', instructional_effect: 'non_instructional', status: 'active', notes: '', source_reference: '' });
 const linkForm = useForm({ link_type: 'calendar_profile', link_id: props.calendar.id });
 const unlinkForm = useForm({});
@@ -35,9 +37,11 @@ const unlinkSource = (source: any) => unlinkForm.delete(route('academic.sources.
     <AuthenticatedLayout>
         <div class="d-flex justify-content-between gap-3 mb-3">
             <div><h1 class="h2">{{ calendar.name }}</h1><p class="text-secondary mb-0">Calendar Profile administration and provenance</p></div>
-            <div><OwnershipBadge :shared="calendar.is_shared" /> <Link v-if="canManage" class="btn btn-sm btn-outline-secondary ms-2" :href="route('academic.calendars.edit', calendar.id)">Edit profile</Link></div>
+            <div><span v-if="calendar.status === 'archived'" class="badge text-bg-secondary me-2">Archived</span><span v-if="lifecycle.is_in_use" class="badge text-bg-primary me-2">In use</span><OwnershipBadge :shared="calendar.is_shared" /> <Link v-if="lifecycle.can_edit" class="btn btn-sm btn-outline-secondary ms-2" :href="route('academic.calendars.edit', calendar.id)">Edit profile</Link></div>
         </div>
         <AcademicNav />
+        <div v-if="calendar.status === 'archived'" class="alert alert-secondary" role="status">This Calendar Profile is archived and read-only. Restore it to Draft before editing events or source links.</div>
+        <section class="card mb-4" aria-labelledby="lifecycle-heading"><div class="card-body"><h2 id="lifecycle-heading" class="h5">Lifecycle actions</h2><p v-if="lifecycle.usage.length">Used by {{ lifecycle.usage.map((item: any) => `${item.school_year} Academic Setup (${item.status})`).join(', ') }}.</p><CalendarLifecycleActions :calendar="calendar" :lifecycle="lifecycle" /></div></section>
 
         <section class="card mb-4" aria-labelledby="calendar-information-heading">
             <div class="card-body"><h2 id="calendar-information-heading" class="h5">Calendar information</h2>

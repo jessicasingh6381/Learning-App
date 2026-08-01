@@ -78,8 +78,9 @@ Route::middleware(['auth', 'admin.user', 'tenant'])->group(function () {
             ->except(['show', 'destroy'])
             ->parameters(['providers' => 'provider']);
         Route::resource('calendars', CalendarProfileController::class)
-            ->except('destroy')
             ->parameters(['calendars' => 'calendar']);
+        Route::patch('/calendars/{calendar}/archive', [CalendarProfileController::class, 'archive'])->name('calendars.archive');
+        Route::patch('/calendars/{calendar}/restore', [CalendarProfileController::class, 'restore'])->name('calendars.restore');
         Route::post('/calendars/{calendar}/events', [CalendarEventController::class, 'store'])->name('calendars.events.store');
         Route::patch('/calendars/{calendar}/events/{event}', [CalendarEventController::class, 'update'])->name('calendars.events.update');
         Route::resource('standards', StandardsFrameworkController::class)

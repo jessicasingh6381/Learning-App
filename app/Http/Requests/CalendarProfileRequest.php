@@ -41,11 +41,11 @@ class CalendarProfileRequest extends FormRequest
             'timezone' => ['required', 'timezone:all'],
             'status' => [
                 'required',
-                Rule::in(['draft', 'active', 'retired', 'archived']),
+                Rule::in(['draft', 'active', 'retired']),
                 new ValidStatusTransition($this->route('calendar')?->status, [
-                    'draft' => ['active', 'archived'],
-                    'active' => ['retired', 'archived'],
-                    'retired' => ['active', 'archived'],
+                    'draft' => ['active'],
+                    'active' => ['retired'],
+                    'retired' => ['active'],
                     'archived' => [],
                 ]),
             ],
