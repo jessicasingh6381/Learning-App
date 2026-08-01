@@ -94,6 +94,7 @@ class CalendarProfileProvenanceTest extends TestCase
             'link_type' => 'calendar_profile', 'link_id' => $calendar->id,
         ])->assertRedirect();
         $this->assertSame('https://www.example.edu/original', $calendar->fresh()->source_url);
+        $this->assertSame('unreviewed', $source->fresh()->review_status);
         $this->assertDatabaseCount('calendar_events', 0);
 
         $this->actingIn($owner, $tenant)->patch("/academic-setup/calendars/{$calendar->id}", $this->calendarPayload([
