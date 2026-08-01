@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\CurriculumIntakeService;
 use App\Services\WorkspaceSummaryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -17,13 +18,19 @@ class WorkspaceController extends Controller
         return Inertia::render('Workspace/Home', $summary->build());
     }
 
-    public function learningPlan(Request $request, WorkspaceSummaryService $summary): Response
-    {
+    public function learningPlan(
+        Request $request,
+        WorkspaceSummaryService $summary,
+        CurriculumIntakeService $curriculumIntake,
+    ): Response {
         Gate::authorize('workspace.view');
         $data = $summary->build();
         $requestedStudentId = $request->integer('student_id');
         $data['selectedStudent'] = collect($data['students'])->firstWhere('id', $requestedStudentId)
             ?? collect($data['students'])->first();
+        $intake = $curriculumIntake->build($data['selectedStudent']['id'] ?? null, $data['schoolYear']['id'] ?? null);
+        $data['curriculumBySubject'] = $intake['subjects'];
+        $data['curriculumIntakeAvailable'] = $intake['permissions']['create'];
 
         return Inertia::render('Workspace/LearningPlan', $data);
     }
