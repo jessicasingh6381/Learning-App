@@ -2,6 +2,7 @@ import { config, mount } from '@vue/test-utils';
 import { reactive } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import CalendarLifecycleActions from '@/Components/CalendarLifecycleActions.vue';
 import CalendarShow from './Calendars/Show.vue';
 import CalendarsIndex from './Calendars/Index.vue';
 import CalendarForm from './Calendars/Form.vue';
@@ -17,6 +18,8 @@ const state = vi.hoisted(() => ({
     post: vi.fn(),
     patch: vi.fn(),
     remove: vi.fn(),
+    processing: false,
+    errors: {} as Record<string, string>,
 }));
 
 vi.mock('@inertiajs/vue3', () => ({
@@ -37,12 +40,13 @@ vi.mock('@inertiajs/vue3', () => ({
     useForm: (values: Record<string, unknown>) => {
         const form = reactive({
             ...values,
-            errors: {} as Record<string, string>,
-            processing: false,
+            errors: state.errors,
+            processing: state.processing,
             post: state.post,
             patch: state.patch,
             delete: state.remove,
             reset: vi.fn(),
+            clearErrors: vi.fn(),
         });
         return form;
     },
@@ -56,6 +60,11 @@ config.global.mocks = {
 
 const layoutStub = { template: '<main><slot /></main>' };
 const academicNavStub = { template: '<nav>Academic navigation</nav>' };
+const lifecycle = (overrides: Record<string, unknown> = {}) => ({
+    academic_configuration_count: 0, active_configuration_count: 0, event_count: 0, linked_source_count: 0,
+    is_in_use: false, usage: [], can_manage: true, can_edit: true, can_archive: true, can_restore: false,
+    can_delete: true, archive_blockers: [], deletion_blockers: [], ...overrides,
+});
 
 describe('Academic setup UI', () => {
     beforeEach(() => {
@@ -63,6 +72,8 @@ describe('Academic setup UI', () => {
         state.post.mockReset();
         state.patch.mockReset();
         state.remove.mockReset();
+        state.processing = false;
+        state.errors = {};
     });
 
     it('shows grouped academic navigation only to authorized adult users', () => {
@@ -282,7 +293,7 @@ describe('Academic setup UI', () => {
     it('shows draft Calendar Profiles and their linked source in the Calendars tab', () => {
         state.permissions = ['calendars.view', 'calendars.manage'];
         const wrapper = mount(CalendarsIndex, {
-            props: { calendars: [{ id: 4, name: 'Calendar PDF', academic_year_label: '2026-2027', start_date: '2026-08-12', end_date: '2027-05-27', status: 'draft', events_count: 0, is_shared: false, has_source_website: true, education_provider: { name: 'CFISD' }, linked_sources: [{ id: 9, title: 'Calendar PDF source' }] }] },
+            props: { filters: { show: 'active' }, calendars: [{ id: 4, name: 'Calendar PDF', academic_year_label: '2026-2027', start_date: '2026-08-12', end_date: '2027-05-27', status: 'draft', events_count: 0, is_shared: false, has_source_website: true, education_provider: { name: 'CFISD' }, linked_sources: [{ id: 9, title: 'Calendar PDF source' }], lifecycle: lifecycle({ linked_source_count: 1, can_delete: false, deletion_blockers: ['Has 1 linked source document.'] }) }] },
             global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub, OwnershipBadge: true } },
         });
         expect(wrapper.text()).toContain('Calendar PDF');
@@ -290,6 +301,81 @@ describe('Academic setup UI', () => {
         expect(wrapper.text()).toContain('Source website · 1 linked document');
         expect(wrapper.text()).not.toContain('https://');
         expect(wrapper.text()).toContain('0');
+    });
+
+    it('renders archived filtering, archived status, restoration, and in-use context', () => {
+        state.permissions = ['calendars.view', 'calendars.manage'];
+        const wrapper = mount(CalendarsIndex, {
+            props: {
+                filters: { show: 'archived' },
+                calendars: [{
+                    id: 1, name: 'Archived district calendar', academic_year_label: '2026-2027',
+                    start_date: '2026-08-12', end_date: '2027-05-27', status: 'archived', is_shared: false,
+                    has_source_website: true, education_provider: { name: 'CFISD' }, linked_sources: [],
+                    lifecycle: lifecycle({ can_edit: false, can_archive: false, can_restore: true, can_delete: false, is_in_use: true, academic_configuration_count: 1, active_configuration_count: 1, usage: [{ school_year: '2026-2027', status: 'draft' }], deletion_blockers: ['Selected by 1 current Academic Setup configuration.'] }),
+                }],
+            },
+            global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub, OwnershipBadge: true } },
+        });
+        expect(wrapper.get('a[aria-current="page"]').text()).toBe('Archived');
+        expect(wrapper.text()).toContain('Archived');
+        expect(wrapper.text()).toContain('In use');
+        expect(wrapper.text()).toContain('Used by 2026-2027 Academic Setup (draft)');
+        expect(wrapper.text()).toContain('Restore');
+        expect(wrapper.text()).toContain('Permanent deletion unavailable');
+        expect(wrapper.text()).not.toContain('Edit');
+    });
+
+    it('requires accessible confirmations for archive and irreversible deletion', async () => {
+        const archive = mount(CalendarLifecycleActions, { props: { calendar: { id: 1, name: 'Calendar', status: 'draft' }, lifecycle: lifecycle() } });
+        await archive.get('button.btn-outline-secondary').trigger('click');
+        const archiveDialog = archive.get('[role="dialog"]');
+        expect(archiveDialog.attributes('aria-modal')).toBe('true');
+        expect(archiveDialog.text()).toContain('Archive this Calendar Profile?');
+        expect(archiveDialog.text()).toContain('Calendar Events, source documents, and Academic Setup history will not be deleted.');
+        await archiveDialog.get('button.btn-warning').trigger('click');
+        expect(state.patch).toHaveBeenCalledWith(expect.stringContaining('academic.calendars.archive'), expect.any(Object));
+
+        const removal = mount(CalendarLifecycleActions, { props: { calendar: { id: 2, name: 'Unused Calendar', status: 'draft' }, lifecycle: lifecycle() } });
+        await removal.get('button.btn-outline-danger').trigger('click');
+        const deleteDialog = removal.get('[role="dialog"]');
+        const submit = deleteDialog.get('button[type="submit"]');
+        expect(deleteDialog.text()).toContain('This cannot be undone.');
+        expect(submit.attributes('disabled')).toBeDefined();
+        await deleteDialog.get('#calendar-delete-confirmation').setValue('DELETE');
+        expect(deleteDialog.get('button[type="submit"]').attributes('disabled')).toBeUndefined();
+        await deleteDialog.get('form').trigger('submit');
+        expect(state.remove).toHaveBeenCalledWith(expect.stringContaining('academic.calendars.destroy'), expect.any(Object));
+    });
+
+    it('shows dependency and authorization feedback without offering doomed lifecycle actions', () => {
+        const blocked = mount(CalendarLifecycleActions, {
+            props: {
+                calendar: { id: 1, name: 'Used Calendar', status: 'draft' },
+                lifecycle: lifecycle({ can_archive: false, can_delete: false, archive_blockers: ['Selected in current Academic Setup.'], deletion_blockers: ['Contains 4 Calendar Events.', 'Has 1 linked source document.'] }),
+            },
+        });
+        expect(blocked.text()).toContain('Archive unavailable');
+        expect(blocked.text()).toContain('Selected in current Academic Setup.');
+        expect(blocked.text()).toContain('Contains 4 Calendar Events.');
+        expect(blocked.text()).toContain('Has 1 linked source document.');
+        expect(blocked.find('button.btn-outline-danger').exists()).toBe(false);
+
+        const student = mount(CalendarLifecycleActions, { props: { calendar: { id: 1, name: 'Calendar', status: 'draft' }, lifecycle: lifecycle({ can_manage: false, can_edit: false, can_archive: false, can_delete: false }) } });
+        expect(student.find('button').exists()).toBe(false);
+        expect(student.text()).toBe('');
+
+        state.errors = { lifecycle: 'The Calendar Profile changed before the action completed.' };
+        const errored = mount(CalendarLifecycleActions, { props: { calendar: { id: 1, name: 'Calendar', status: 'draft' }, lifecycle: lifecycle() } });
+        expect(errored.get('[role="alert"]').text()).toContain('changed before the action completed');
+    });
+
+    it('disables lifecycle controls while a request is processing', () => {
+        state.processing = true;
+        const wrapper = mount(CalendarLifecycleActions, { props: { calendar: { id: 1, name: 'Calendar', status: 'draft' }, lifecycle: lifecycle() } });
+        expect(wrapper.get('button.btn-outline-secondary').attributes('disabled')).toBeDefined();
+        expect(wrapper.get('button.btn-outline-danger').attributes('disabled')).toBeDefined();
+        expect(wrapper.text()).toContain('Archiving…');
     });
 
     it('distinguishes shared providers and hides platform edit actions', () => {
@@ -324,6 +410,7 @@ describe('Academic setup UI', () => {
                 linkedSources: [{ id: 9, link_id: 3, title: 'Calendar PDF source', source_kind: 'upload', source_category: 'calendar', authority_level: 'official_provider', review_status: 'reviewed', current_file: null, external_url: null, can_manage: true, can_download: true }],
                 suggestedSources: [],
                 sourceWebsite: null,
+                lifecycle: lifecycle({ event_count: 2, linked_source_count: 1 }),
             },
             global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub } },
         });
@@ -347,6 +434,7 @@ describe('Academic setup UI', () => {
                 summaries: [{ school_year_id: 1, school_year_name: '2026-2027', compatible: true, base_days: 207, removed_days: 0, added_days: 0, scheduled_days: 207 }],
                 linkedSources: [{ id: 2, link_id: 8, title: 'District calendar PDF', source_kind: 'upload', source_category: 'calendar', authority_level: 'official_provider', review_status: 'unreviewed', external_url: null, current_file: { id: 4, original_filename: 'calendar.pdf', is_pdf: true }, can_manage: true, can_download: true }],
                 suggestedSources: [],
+                lifecycle: lifecycle({ linked_source_count: 1 }),
             },
             global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub, OwnershipBadge: true, CalendarEventRow: true } },
         });
@@ -367,7 +455,7 @@ describe('Academic setup UI', () => {
         const wrapper = mount(CalendarShow, {
             props: {
                 calendar: { id: 1, name: 'Calendar', academic_year_label: '', start_date: '2026-08-12', end_date: '2027-05-27', timezone: 'America/Chicago', status: 'draft', source_version: null, education_provider: null, is_shared: false, events: [] },
-                sourceWebsite: null, summaries: [], linkedSources: [], suggestedSources: [],
+                sourceWebsite: null, summaries: [], linkedSources: [], suggestedSources: [], lifecycle: lifecycle({ can_manage: false, can_edit: false, can_archive: false, can_delete: false }),
             },
             global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub, OwnershipBadge: true } },
         });
