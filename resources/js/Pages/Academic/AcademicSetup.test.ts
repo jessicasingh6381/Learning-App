@@ -76,17 +76,17 @@ describe('Academic setup UI', () => {
         state.errors = {};
     });
 
-    it('shows grouped academic navigation only to authorized adult users', () => {
-        state.permissions = ['dashboard.view', 'academic-config.view'];
+    it('keeps advanced academic setup in Settings and hides it from unauthorized adults', () => {
+        state.permissions = ['workspace.view', 'advanced-academic.view', 'academic-config.view'];
         const owner = mount(AuthenticatedLayout);
-        expect(owner.text()).toContain('Academic setup');
-        expect(owner.text()).toContain('Calendars');
-        expect(owner.text()).toContain('Sources');
+        expect(owner.text()).toContain('Advanced Academic Setup');
+        expect(owner.text()).toContain('Learning Plan');
+        expect(owner.text()).toContain('Calendar');
 
-        state.permissions = [];
-        const student = mount(AuthenticatedLayout);
-        expect(student.text()).not.toContain('Academic setup');
-        expect(student.text()).not.toContain('Sources');
+        state.permissions = ['workspace.view', 'academic-config.view'];
+        const parent = mount(AuthenticatedLayout);
+        expect(parent.text()).not.toContain('Advanced Academic Setup');
+        expect(parent.text()).toContain('Learning Plan');
     });
 
     it('renders saved overview selections, exact totals, missing steps, and copy warning', () => {

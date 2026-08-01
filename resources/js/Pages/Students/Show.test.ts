@@ -16,9 +16,7 @@ vi.mock('@inertiajs/vue3', () => ({
 
 const student = {
     id: 1,
-    first_name: 'Kai',
-    last_name: 'Singh',
-    preferred_name: null,
+    name: 'Kai Singh',
     status: 'active',
     enrollments: [],
 };

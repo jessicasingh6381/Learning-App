@@ -161,7 +161,7 @@ class VerificationRegressionTest extends TestCase
         $this->actingIn($user, $teacherTenant)->get('/students/create')->assertOk();
     }
 
-    public function test_dashboard_counts_and_audit_activity_are_tenant_isolated(): void
+    public function test_workspace_student_summaries_are_tenant_isolated(): void
     {
         $ownerA = User::factory()->create();
         $tenantA = $this->tenant('A');
@@ -177,10 +177,10 @@ class VerificationRegressionTest extends TestCase
         ]);
 
         $this->actingIn($ownerA, $tenantA)->get('/dashboard')->assertInertia(fn (Assert $page) => $page
-            ->where('counts.activeStudents', 1)
-            ->where('counts.currentEnrollments', 1)
-            ->has('activity', 1)
-            ->where('activity.0.action', 'a.action'));
+            ->component('Workspace/Home')
+            ->where('academy.name', 'A')
+            ->has('students', 1)
+            ->where('students.0.name', 'A Student'));
     }
 
     public function test_audit_failure_rolls_back_the_primary_operation(): void
