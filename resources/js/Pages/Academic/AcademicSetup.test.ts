@@ -6,6 +6,9 @@ import CalendarShow from './Calendars/Show.vue';
 import CurriculumShow from './Curriculum/Show.vue';
 import Overview from './Overview.vue';
 import ProvidersIndex from './Providers/Index.vue';
+import SourcesForm from './Sources/Form.vue';
+import SourcesIndex from './Sources/Index.vue';
+import SourcesShow from './Sources/Show.vue';
 
 const state = vi.hoisted(() => ({
     permissions: [] as string[],
@@ -65,10 +68,12 @@ describe('Academic setup UI', () => {
         const owner = mount(AuthenticatedLayout);
         expect(owner.text()).toContain('Academic setup');
         expect(owner.text()).toContain('Calendars');
+        expect(owner.text()).toContain('Sources');
 
         state.permissions = [];
         const student = mount(AuthenticatedLayout);
         expect(student.text()).not.toContain('Academic setup');
+        expect(student.text()).not.toContain('Sources');
     });
 
     it('renders saved overview selections, exact totals, missing steps, and copy warning', () => {
@@ -96,6 +101,7 @@ describe('Academic setup UI', () => {
                 },
                 summary: { base_days: 207, removed_days: 27, added_days: 0, scheduled_days: 180 },
                 mappedCourseCount: 4,
+                sourceCounts: { calendar: 2, curriculum: 1, courses: 3 },
                 checklist: {
                     school_year: true,
                     provider: true,
@@ -124,7 +130,63 @@ describe('Academic setup UI', () => {
         expect(wrapper.text()).toContain('Custom Calendar (custom)');
         expect(wrapper.text()).toContain('courses');
         expect(wrapper.text()).toContain('Missing');
+        expect(wrapper.text()).toContain('3 related sources');
         expect(wrapper.text()).toContain('Enrollments, audits, and incompatible calendars are not copied.');
+    });
+
+    it('renders source library metadata, review state, and private attachment version', () => {
+        const wrapper = mount(SourcesIndex, {
+            props: {
+                sources: { data: [{ id: 9, title: 'Official calendar', source_kind: 'upload', source_category: 'calendar', authority_level: 'official_provider', review_status: 'in_review', processing_status: 'not_requested', updated_at: '2026-08-01T12:00:00Z', school_year: { name: '2026-2027' }, education_provider: { name: 'CFISD' }, grade_level: null, current_file: { original_filename: 'calendar.pdf', version_number: 2 } }], links: [] },
+                filters: {},
+                options: { categories: ['calendar'], kinds: ['upload'], reviewStatuses: ['in_review'], schoolYears: [], providers: [], gradeLevels: [] },
+                canCreate: true,
+            },
+            global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub } },
+        });
+        expect(wrapper.text()).toContain('Official calendar');
+        expect(wrapper.text()).toContain('In Review');
+        expect(wrapper.text()).toContain('calendar.pdf (v2)');
+        expect(wrapper.text()).toContain('Add source');
+    });
+
+    it('changes source intake fields by kind without offering upload replacement on edit', async () => {
+        const options = { kinds: ['upload', 'url', 'manual'], categories: ['calendar'], authorityLevels: ['unknown'], providers: [], schoolYears: [], gradeLevels: [], subjects: [] };
+        const wrapper = mount(SourcesForm, {
+            props: { defaults: { source_kind: 'upload', source_category: 'calendar' }, options, maxUploadMegabytes: 25 },
+            global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub } },
+        });
+        expect(wrapper.get('#source-file').attributes('accept')).toContain('.docx');
+        expect(wrapper.text()).toContain('remain private');
+        await wrapper.get('#source-kind-form').setValue('url');
+        expect(wrapper.find('#source-url').exists()).toBe(true);
+        expect(wrapper.text()).toContain('does not fetch');
+
+        const edit = mount(SourcesForm, {
+            props: { source: { id: 1, title: 'Existing', source_kind: 'upload', source_category: 'calendar', authority_level: 'unknown' }, options, maxUploadMegabytes: 25 },
+            global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub } },
+        });
+        expect(edit.find('#source-file').exists()).toBe(false);
+        expect(edit.get('#source-kind-form').attributes('disabled')).toBeDefined();
+    });
+
+    it('shows safe source details and category-aware reviewed draft actions', () => {
+        const wrapper = mount(SourcesShow, {
+            props: {
+                source: { id: 4, title: 'Calendar reference', description: 'Official page reference', source_kind: 'url', source_category: 'calendar', authority_level: 'official_provider', review_status: 'reviewed', processing_status: 'not_requested', source_url: 'https://example.edu/calendar', publication_date: '2026-07-01', version_label: '2026', academic_year_label: '2026-2027', notes: '', archived_at: null, education_provider_id: 1, education_provider: { name: 'Provider' }, school_year: { name: '2026-2027' }, grade_level: null, files: [] },
+                links: [], linkChoices: { school_year: [] },
+                courseChoices: { subjects: [], gradeLevels: [], providers: [], frameworks: [] },
+                permissions: { manage: true, review: true, download: true }, reviewTransitions: ['rejected', 'archived'],
+            },
+            global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub } },
+        });
+        const external = wrapper.get('a[href="https://example.edu/calendar"]');
+        expect(external.attributes('target')).toBe('_blank');
+        expect(external.attributes('rel')).toContain('noopener');
+        expect(wrapper.text()).toContain('Create calendar draft');
+        expect(wrapper.text()).not.toContain('Create curriculum draft');
+        expect(wrapper.text()).toContain('not fetched by the application');
+        expect(wrapper.get('button.btn-outline-danger').text()).toContain('Archive source');
     });
 
     it('distinguishes shared providers and hides platform edit actions', () => {
