@@ -28,6 +28,14 @@ URL sources accept only syntactically valid HTTP or HTTPS addresses without embe
 
 External links open with `noopener`, `noreferrer`, and `nofollow`. They are displayed as user-supplied references, not endorsed or trusted content.
 
+Calendar Profiles also have an optional direct `source_url` and `source_version`. That lightweight reference uses the same centralized external-address safety boundary but remains distinct from an Academic Source record. The profile detail page labels it as the direct source website and shows the source version only when present. It never silently creates a source record, uploads a file, or creates a link.
+
+### Calendar Profile source documents
+
+The Calendar Profile detail page always includes a Source documents subsection. Linked Academic Sources show their title, kind, category, authority, review state, and whether they are a file, URL, or manual reference. Authorized adults can view a linked PDF inline, download a private file, open a validated URL, inspect source details, or unlink the relationship. When no link exists, the page states that explicitly and offers links to the filtered source library and new-source form.
+
+Unlinked, active calendar sources are suggested only when their tenant visibility, provider, and covered school year are compatible with the profile. Linking is an explicit audited action through `academic_source_links`; it does not alter review state, copy metadata into the profile, overwrite `calendar_profiles.source_url`, create Calendar Events, or change scheduled totals. Conversely, editing or removing the direct profile URL leaves all managed source links intact. Both provenance forms may coexist, and neither is required for Calendar completion.
+
 ## Review and structured drafts
 
 A reviewed calendar-category source may create an empty draft calendar covering the selected school year. A reviewed curriculum, pacing, or scope-and-sequence source may create an empty draft curriculum package. A reviewed course-guide or curriculum source may create a draft course from adult-entered required fields. Every draft is linked back to the source and audited. These actions do not extract dates, events, courses, units, lessons, standards, or other source content, and they do not activate the result.
@@ -47,6 +55,8 @@ Exactly one related source links directly to its detail page; multiple sources l
 PDF file versions have an authenticated inline-view route in addition to secure download. It reuses tenant-scoped source binding and download authorization, verifies the file belongs to the source, checks storage existence, and permits only the PDF MIME/extension pair. Responses use `application/pdf`, inline disposition, and `X-Content-Type-Options: nosniff`; private paths are never returned. DOCX, XLSX, CSV, TXT, images, and other formats remain download-only. No public storage URL is created.
 
 Academic Setup reports related active-source counts for calendar, curriculum, and course areas. Counts are informational evidence and remain separate from the existing completion checklist, whose meaning is still based on configured structured records.
+
+When the selected compatible profile has a direct source website and related calendar evidence is still unlinked, Academic Setup may show a non-blocking provenance note with profile/link actions. The configuration remains complete because provenance linkage is optional.
 
 ## Authorization
 

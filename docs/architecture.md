@@ -134,6 +134,12 @@ Academic source records use the same tenant scope and audit boundary. Source URL
 
 Calendar setup state is derived rather than persisted. A source-only state means evidence exists but no source-linked Calendar Profile has been created. A source-linked draft or another compatible unselected profile is availability, not completion. Completion requires the academic-year configuration to select a tenant-visible draft or active profile that covers the full school-year range and does not conflict with its selected provider. Removing or invalidating the selection makes the step incomplete again. Draft profiles may be selected while the configuration remains draft under the existing lifecycle rules.
 
+### Calendar provenance boundaries
+
+`calendar_profiles.source_url` and `source_version` are lightweight provenance metadata for the profile itself. They are not foreign keys and do not imply that an Academic Source exists. The normal profile view serializes a direct URL only after centralized store-only validation confirms a public HTTP(S) address without embedded credentials; unsafe legacy values are not emitted as links. Browser links use a new tab with `noopener noreferrer`, and the server never fetches, resolves, previews, or proxies the address.
+
+Managed evidence remains in `academic_sources`, `academic_source_files`, and `academic_source_links`. A Calendar Profile may have a direct URL, linked sources, both, or neither. Compatible unlinked calendar sources are suggestions only, and an authorized adult must explicitly create the existing allowlisted `calendar_profile` link. Link changes are independent of direct URL edits and do not change review state, calendar events, configuration completion, or calculated totals. Uploaded files remain private and require source authorization for inline PDF viewing or download. Students cannot reach the academic administration routes or their provenance controls.
+
 ## Historical-data rules
 
 Students, school years, enrollments, and academic configurations have no ordinary destructive route. Student archival is status-based. School years and configurations are closed or archived. Shared/tenant academic resources use lifecycle statuses, package versions, restrictive foreign keys, and draft-only mapping removal. Historical enrollment rows retain the grade level that applied in that school year.
