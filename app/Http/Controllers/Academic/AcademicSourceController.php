@@ -378,6 +378,10 @@ class AcademicSourceController extends Controller
     {
         Gate::authorize('curriculum.manage');
         $this->assertReviewedCategory($source, ['curriculum', 'pacing', 'scope_and_sequence']);
+        $existingId = $source->links()->where('link_type', 'curriculum_package')->value('link_id');
+        if ($existingId && $existing = CurriculumPackage::query()->find($existingId)) {
+            return redirect()->route('academic.curriculum.show', $existing)->with('success', 'The existing draft curriculum package is ready to open.');
+        }
         $frameworkLink = $source->links()->where('link_type', 'standards_framework')->first();
 
         $package = DB::transaction(function () use ($source, $frameworkLink, $links, $audit) {
@@ -386,7 +390,7 @@ class AcademicSourceController extends Controller
                 'standards_framework_id' => $frameworkLink?->link_id,
                 'name' => $source->title,
                 'version_label' => $source->version_label ?: ($source->academic_year_label ?: ($source->schoolYear?->name ?: 'Draft 1')),
-                'description' => 'Draft created from reviewed academic source: '.$source->title.'. No courses, units, or lessons were extracted.',
+                'description' => null,
                 'status' => 'draft',
                 'source_url' => $source->source_kind === 'url' ? $source->source_url : null,
             ]);

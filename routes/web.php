@@ -9,6 +9,7 @@ use App\Http\Controllers\Academic\CurriculumPackageController;
 use App\Http\Controllers\Academic\EducationProviderController;
 use App\Http\Controllers\Academic\StandardsFrameworkController;
 use App\Http\Controllers\Academic\SubjectController;
+use App\Http\Controllers\CurriculumIntakeController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EnrollmentController;
 use App\Http\Controllers\ProfileController;
@@ -45,6 +46,9 @@ Route::middleware(['auth', 'admin.user'])->group(function () {
 Route::middleware(['auth', 'admin.user', 'tenant'])->group(function () {
     Route::get('/dashboard', [WorkspaceController::class, 'home'])->name('dashboard');
     Route::get('/learning-plan', [WorkspaceController::class, 'learningPlan'])->name('workspace.learning-plan');
+    Route::get('/learning-plan/curriculum-intake', [CurriculumIntakeController::class, 'index'])->name('workspace.curriculum-intake');
+    Route::post('/learning-plan/curriculum-intake', [CurriculumIntakeController::class, 'store'])->name('workspace.curriculum-intake.store');
+    Route::post('/learning-plan/curriculum-intake/sources/{source}/draft', [CurriculumIntakeController::class, 'createDraft'])->name('workspace.curriculum-intake.draft');
     Route::get('/calendar', [WorkspaceController::class, 'calendar'])->name('workspace.calendar');
     Route::get('/workspace/{section}', [WorkspaceController::class, 'placeholder'])
         ->whereIn('section', ['assignments', 'gradebook', 'attendance', 'reports'])
