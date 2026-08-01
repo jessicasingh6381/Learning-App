@@ -166,6 +166,12 @@ Adult users with `workspace.view` land on the friendly workspace Home. Every sum
 
 Student Portal continues to use its isolated layout and middleware. Advanced Academic Setup remains the technical configuration area. Its navigation entry requires `advanced-academic.view`; route authorization inside that area continues to use the existing granular academic permissions. See [Parent/Teacher Workspace](parent-teacher-workspace.md).
 
+### Curriculum intake boundary
+
+`CurriculumIntakeService` composes existing tenant-scoped enrollments, providers, subjects, Academic Sources, source links, Curriculum Packages, and course mappings into a friendly subject status. Student and school-year selection resolves an existing planned or active enrollment; the enrollment's grade is authoritative and client-supplied grade or tenant identifiers are prohibited.
+
+Intake creates an ordinary `curriculum` Academic Source and delegates uploaded files, safe external URLs, subject/provider/year/grade links, permissions, and audits to existing boundaries. A reviewed source may initialize exactly one linked draft Curriculum Package with adult-confirmed name, version, provider, and source metadata. It does not create courses, units, lessons, standards mappings, pacing, or assignments. See [Curriculum Intake](curriculum-intake.md).
+
 ## Membership onboarding
 
 Milestone 1 member management edits existing memberships. Adding or inviting members, acceptance tokens, and invitation email are deliberately deferred and the interface says so. Duplicate tenant/user memberships are prevented by a unique database constraint.

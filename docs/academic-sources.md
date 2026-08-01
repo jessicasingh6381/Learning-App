@@ -28,6 +28,12 @@ URL sources accept only syntactically valid HTTP or HTTPS addresses without embe
 
 External links open with `noopener`, `noreferrer`, and `nofollow`. They are displayed as user-supplied references, not endorsed or trusted content.
 
+## Grade- and subject-based curriculum intake
+
+The Parent/Teacher Curriculum Intake page creates ordinary Academic Sources with category `curriculum`. It derives grade from the selected student's planned or active school-year enrollment and adds controlled links for provider, school year, grade level, and subject. PDF uploads use the same private versioned storage service; URL references use the same store-only validation; manual references require identifying adult-supplied text.
+
+Source existence, review, structured draft, and readiness are separate states. Linking one source to a Curriculum Package does not copy its file. A source may retain multiple allowlisted links without duplicating stored bytes. Student users have neither intake nor source/file permissions, and active-tenant binding prevents guessed foreign source or file identifiers from resolving.
+
 Calendar Profiles also have an optional direct `source_url` and `source_version`. That lightweight reference uses the same centralized external-address safety boundary but remains distinct from an Academic Source record. The profile detail page labels it as the direct source website and shows the source version only when present. It never silently creates a source record, uploads a file, or creates a link.
 
 ### Calendar Profile source documents

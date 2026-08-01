@@ -32,6 +32,8 @@ Home presents academy context, active year, students, setup, Needs Attention, To
 
 Students presents current enrollment and access details, with archived filtering and retained enrollment history. Learning Plan groups mapped courses by subject and uses honest guidance when provider, calendar, standards, curriculum, or courses are missing. Calendar explains calculated schedule totals and links authorized owners/administrators to technical calendar setup.
 
+Learning Plan also presents Curriculum by subject for the selected student's enrollment grade and school year. Authorized owners, administrators, teachers, and parents can open the friendly Curriculum Intake workflow without starting in Advanced Academic Setup. Intake status comes from saved sources, review state, linked drafts, and approved course structure; an upload alone never makes a subject ready.
+
 Assignments, Gradebook, Attendance, and Reports are explicit placeholders. No tables, models, records, calculations, sample activity, or fake progress were added for them. Student details likewise describe lesson activity, mastery, and progress as future work.
 
 ## Permissions and tenancy

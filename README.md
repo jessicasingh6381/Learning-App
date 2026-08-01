@@ -76,7 +76,7 @@ npm run build
 
 The active tenant is a server-side session selection validated against an active membership on each tenant request. Tenant middleware runs before route model binding. Tenant-owned models receive a centralized, fail-closed global scope and automatically receive the active `tenant_id` when created. Code that genuinely needs an unscoped query must opt into Laravel's explicit `withoutGlobalScopes()` API. Policies and centralized permission mappings provide a second authorization boundary. Students are academic profiles with an optional login relationship; grade is stored on a school-year enrollment, not the student.
 
-See [Architecture](docs/architecture.md), [Parent/Teacher workspace](docs/parent-teacher-workspace.md), [Academic configuration](docs/academic-configuration.md), and [Academic sources](docs/academic-sources.md) for rules and decisions.
+See [Architecture](docs/architecture.md), [Parent/Teacher workspace](docs/parent-teacher-workspace.md), [Curriculum intake](docs/curriculum-intake.md), [Academic configuration](docs/academic-configuration.md), and [Academic sources](docs/academic-sources.md) for rules and decisions.
 
 ## Shared hosting and cPanel
 
@@ -92,6 +92,7 @@ Deploy source and Composer production dependencies, configure the web root to `p
 - One planned or active enrollment is allowed per student and school year. Completion and withdrawal dates are required for those terminal statuses and must fall within the school-year dates.
 - Adult users land in a friendly Parent/Teacher Workspace. Home, Students, Learning Plan, and Calendar summarize saved tenant data; technical resource management remains under Advanced Academic Setup.
 - Assignments, Gradebook, Attendance, and Reports are navigation placeholders only. They create no feature records and perform no calculations.
+- Curriculum Intake under Learning Plan lets authorized adults add grade- and subject-specific PDF, URL, or manual sources. Grade is derived from enrollment, files remain private, and source review is kept separate from draft or ready curriculum status.
 - Calendar values are stored as date-only fields. They represent the tenant's stated calendar dates and do not undergo server-timezone conversion.
 - Final-owner checks run in transactions and at model boundaries. A tenant with memberships cannot be deleted directly.
 
