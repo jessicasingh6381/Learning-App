@@ -19,6 +19,7 @@ use App\Http\Controllers\StudentPasswordController;
 use App\Http\Controllers\StudentPortalController;
 use App\Http\Controllers\TenantController;
 use App\Http\Controllers\TenantMemberController;
+use App\Http\Controllers\WorkspaceController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -42,7 +43,14 @@ Route::middleware(['auth', 'admin.user'])->group(function () {
 });
 
 Route::middleware(['auth', 'admin.user', 'tenant'])->group(function () {
-    Route::get('/dashboard', DashboardController::class)->name('dashboard');
+    Route::get('/dashboard', [WorkspaceController::class, 'home'])->name('dashboard');
+    Route::get('/learning-plan', [WorkspaceController::class, 'learningPlan'])->name('workspace.learning-plan');
+    Route::get('/calendar', [WorkspaceController::class, 'calendar'])->name('workspace.calendar');
+    Route::get('/workspace/{section}', [WorkspaceController::class, 'placeholder'])
+        ->whereIn('section', ['assignments', 'gradebook', 'attendance', 'reports'])
+        ->name('workspace.placeholder');
+    Route::get('/settings', [WorkspaceController::class, 'settings'])->name('workspace.settings');
+    Route::get('/settings/foundation', DashboardController::class)->name('settings.foundation');
     Route::resource('students', StudentController::class)->except('destroy');
     Route::patch('/students/{student}/archive', [StudentController::class, 'archive'])->name('students.archive');
     Route::get('/students/{student}/access', [StudentAccessController::class, 'show'])->name('students.access.show');

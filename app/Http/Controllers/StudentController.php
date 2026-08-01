@@ -6,7 +6,9 @@ use App\Http\Requests\StudentRequest;
 use App\Models\Student;
 use App\Models\TenantMembership;
 use App\Services\AuditService;
+use App\Tenancy\TenantContext;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
@@ -14,11 +16,43 @@ use Inertia\Response;
 
 class StudentController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
         Gate::authorize('viewAny', Student::class);
+        $status = in_array($request->query('status'), ['active', 'archived', 'all'], true)
+            ? $request->query('status')
+            : 'active';
+        $tenantId = app(TenantContext::class)->tenant()->id;
+        $students = Student::query()
+            ->with([
+                'user.memberships' => fn ($query) => $query->where('tenant_id', $tenantId),
+                'enrollments' => fn ($query) => $query->with(['schoolYear', 'gradeLevel']),
+            ])
+            ->when($status !== 'all', fn ($query) => $query->where('status', $status))
+            ->orderBy('last_name')->orderBy('first_name')->get()
+            ->map(function (Student $student): array {
+                $enrollment = $student->enrollments->first(fn ($item) => in_array($item->status, ['planned', 'active'], true));
+                $membership = $student->user?->memberships->first();
 
-        return Inertia::render('Students/Index', ['students' => Student::query()->orderBy('last_name')->orderBy('first_name')->get()]);
+                return [
+                    'id' => $student->id,
+                    'name' => $student->display_name,
+                    'status' => $student->status,
+                    'enrollment' => $enrollment ? [
+                        'grade' => $enrollment->gradeLevel->name,
+                        'school_year' => $enrollment->schoolYear->name,
+                        'status' => $enrollment->status,
+                    ] : null,
+                    'access_status' => match (true) {
+                        $student->user_id === null => 'Not enabled',
+                        $membership?->status !== 'active' => 'Disabled',
+                        $student->user?->must_change_password => 'Password change required',
+                        default => 'Ready',
+                    },
+                ];
+            });
+
+        return Inertia::render('Students/Index', ['students' => $students, 'filter' => $status]);
     }
 
     public function create(): Response
@@ -61,8 +95,22 @@ class StudentController extends Controller
             ];
         }
 
+        $student->load('enrollments.schoolYear', 'enrollments.gradeLevel');
+
         return Inertia::render('Students/Show', [
-            'student' => $student->load('enrollments.schoolYear', 'enrollments.gradeLevel'),
+            'student' => [
+                'id' => $student->id,
+                'name' => $student->display_name,
+                'status' => $student->status,
+                'enrollments' => $student->enrollments->map(fn ($enrollment) => [
+                    'id' => $enrollment->id,
+                    'status' => $enrollment->status,
+                    'school_year' => ['name' => $enrollment->schoolYear->name],
+                    'grade_level' => ['name' => $enrollment->gradeLevel->name],
+                    'enrollment_date' => $enrollment->enrollment_date->format('Y-m-d'),
+                    'completion_date' => $enrollment->completion_date?->format('Y-m-d'),
+                ])->values(),
+            ],
             'access' => $access,
         ]);
     }

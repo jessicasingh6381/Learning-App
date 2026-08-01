@@ -11,3 +11,6 @@ body { background: #f5f8fa; color: var(--school-ink); }
 .skip-link { position: absolute; left: -9999px; }
 .skip-link:focus { left: 1rem; top: 1rem; z-index: 2000; }
 .native-modal::backdrop { background: rgba(20, 32, 40, .62); }
+.workspace-hero { background: linear-gradient(135deg, #24567a, #347f84); color: white; border-radius: 1rem; padding: clamp(1.5rem, 4vw, 3rem); }
+.student-summary, .friendly-panel { display: block; border: 1px solid #dbe4e9; border-radius: .8rem; padding: 1rem; background: #fff; }
+.student-summary:hover, .student-summary:focus { border-color: var(--school-blue); box-shadow: 0 .2rem .8rem rgba(36, 86, 122, .12); }
