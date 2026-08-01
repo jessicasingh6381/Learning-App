@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Academic\AcademicOverviewController;
+use App\Http\Controllers\Academic\AcademicSourceController;
 use App\Http\Controllers\Academic\CalendarEventController;
 use App\Http\Controllers\Academic\CalendarProfileController;
 use App\Http\Controllers\Academic\CourseController;
@@ -60,6 +61,17 @@ Route::middleware(['auth', 'admin.user', 'tenant'])->group(function () {
         Route::get('/', [AcademicOverviewController::class, 'index'])->name('overview');
         Route::post('/configuration', [AcademicOverviewController::class, 'store'])->name('configuration.store');
         Route::post('/configuration/copy', [AcademicOverviewController::class, 'copy'])->name('configuration.copy');
+
+        Route::resource('sources', AcademicSourceController::class)->except('destroy');
+        Route::patch('/sources/{source}/review', [AcademicSourceController::class, 'review'])->name('sources.review');
+        Route::patch('/sources/{source}/archive', [AcademicSourceController::class, 'archive'])->name('sources.archive');
+        Route::post('/sources/{source}/files', [AcademicSourceController::class, 'replaceFile'])->name('sources.files.store');
+        Route::get('/sources/{source}/files/{file}/download', [AcademicSourceController::class, 'download'])->name('sources.files.download');
+        Route::post('/sources/{source}/links', [AcademicSourceController::class, 'addLink'])->name('sources.links.store');
+        Route::delete('/sources/{source}/links/{link}', [AcademicSourceController::class, 'removeLink'])->name('sources.links.destroy');
+        Route::post('/sources/{source}/draft-calendar', [AcademicSourceController::class, 'createCalendar'])->name('sources.draft-calendar');
+        Route::post('/sources/{source}/draft-curriculum', [AcademicSourceController::class, 'createCurriculum'])->name('sources.draft-curriculum');
+        Route::post('/sources/{source}/draft-course', [AcademicSourceController::class, 'createCourse'])->name('sources.draft-course');
 
         Route::resource('providers', EducationProviderController::class)
             ->except(['show', 'destroy'])

@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\AcademicSource;
+use App\Models\AcademicSourceFile;
+use App\Models\AcademicSourceLink;
 use App\Models\AcademicYearConfiguration;
 use App\Models\AuditLog;
 use App\Models\CalendarEvent;
@@ -47,6 +50,16 @@ class AuditService
         CurriculumPackage::class => ['education_provider_id', 'standards_framework_id', 'name', 'version_label', 'status', 'effective_start_date', 'effective_end_date', 'source_url'],
         CurriculumPackageCourse::class => ['curriculum_package_id', 'course_id', 'grade_level_id', 'sort_order', 'required'],
         AcademicYearConfiguration::class => ['school_year_id', 'education_provider_id', 'calendar_profile_id', 'standards_framework_id', 'curriculum_package_id', 'status', 'configured_by_user_id', 'configured_at'],
+        AcademicSource::class => [
+            'education_provider_id', 'school_year_id', 'grade_level_id', 'title', 'source_kind',
+            'source_category', 'authority_level', 'review_status', 'processing_status',
+            'publication_date', 'retrieved_at', 'version_label', 'academic_year_label', 'archived_at',
+        ],
+        AcademicSourceFile::class => [
+            'academic_source_id', 'uploaded_by_user_id', 'version_number', 'is_current',
+            'original_filename', 'mime_type', 'extension', 'file_size', 'checksum_sha256', 'uploaded_at',
+        ],
+        AcademicSourceLink::class => ['academic_source_id', 'link_type', 'link_id'],
     ];
 
     public function record(string $action, Model $model, array $before = [], array $after = []): void

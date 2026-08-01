@@ -14,6 +14,8 @@ class PermissionService
             'providers.view', 'providers.manage', 'calendars.view', 'calendars.manage',
             'standards.view', 'standards.manage', 'subjects.view', 'subjects.manage',
             'courses.view', 'courses.manage', 'curriculum.view', 'curriculum.manage',
+            'academic-sources.view', 'academic-sources.create', 'academic-sources.manage',
+            'academic-sources.review', 'academic-sources.download',
         ],
         'administrator' => [
             'dashboard.view', 'tenant.manage', 'members.view', 'members.manage',
@@ -22,22 +24,28 @@ class PermissionService
             'providers.view', 'providers.manage', 'calendars.view', 'calendars.manage',
             'standards.view', 'standards.manage', 'subjects.view', 'subjects.manage',
             'courses.view', 'courses.manage', 'curriculum.view', 'curriculum.manage',
+            'academic-sources.view', 'academic-sources.create', 'academic-sources.manage',
+            'academic-sources.review', 'academic-sources.download',
         ],
         'teacher' => [
             'dashboard.view', 'students.view', 'students.manage', 'school-years.view',
             'enrollments.view', 'enrollments.manage', 'academic-config.view',
             'providers.view', 'calendars.view', 'standards.view', 'subjects.view',
             'courses.view', 'courses.manage', 'curriculum.view', 'curriculum.manage',
+            'academic-sources.view', 'academic-sources.create', 'academic-sources.manage',
+            'academic-sources.review', 'academic-sources.download',
         ],
         'parent' => [
             'students.view', 'school-years.view', 'enrollments.view', 'academic-config.view',
             'providers.view', 'calendars.view', 'standards.view', 'subjects.view',
             'courses.view', 'curriculum.view',
+            'academic-sources.view', 'academic-sources.create', 'academic-sources.download',
         ],
         'tutor' => [
             'students.view', 'school-years.view', 'enrollments.view', 'academic-config.view',
             'providers.view', 'calendars.view', 'standards.view', 'subjects.view',
             'courses.view', 'curriculum.view',
+            'academic-sources.view', 'academic-sources.download',
         ],
         'student' => [],
     ];
