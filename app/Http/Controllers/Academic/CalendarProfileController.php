@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Academic;
 use App\Domain\Calendars\ScheduledInstructionalDayCalculator;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CalendarProfileRequest;
+use App\Models\AcademicSource;
 use App\Models\AcademicSourceLink;
 use App\Models\AcademicYearConfiguration;
 use App\Models\CalendarProfile;
 use App\Models\EducationProvider;
 use App\Models\SchoolYear;
 use App\Services\AuditService;
+use App\Support\SafeExternalUrl;
 use App\Tenancy\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Gate;
@@ -29,8 +31,16 @@ class CalendarProfileController extends Controller
 
         return Inertia::render('Academic/Calendars/Index', [
             'calendars' => $calendars->map(fn ($calendar) => [
-                ...$calendar->toArray(),
+                'id' => $calendar->id,
+                'name' => $calendar->name,
+                'academic_year_label' => $calendar->academic_year_label,
+                'start_date' => $calendar->start_date->format('Y-m-d'),
+                'end_date' => $calendar->end_date->format('Y-m-d'),
+                'status' => $calendar->status,
+                'events_count' => $calendar->events_count,
+                'education_provider' => $calendar->educationProvider,
                 'is_shared' => $calendar->isShared(),
+                'has_source_website' => SafeExternalUrl::inspect($calendar->source_url) !== null,
                 'linked_sources' => $sourceLinks->get($calendar->id, collect())->values(),
             ]),
         ]);
@@ -59,6 +69,7 @@ class CalendarProfileController extends Controller
         Gate::authorize('view', $calendar);
         $calendar->load(['events', 'educationProvider:id,name']);
         $linkedSources = $this->sourceLinks([$calendar->id])->get($calendar->id, collect())->values();
+        $suggestedSources = $this->compatibleSources($calendar)->map(fn (AcademicSource $source) => $this->sourcePayload($source));
 
         $summaries = SchoolYear::query()->orderByDesc('start_date')->get()->map(function (SchoolYear $year) use ($calendar, $calculator) {
             $summary = $calculator->summarize(
@@ -79,9 +90,26 @@ class CalendarProfileController extends Controller
         });
 
         return Inertia::render('Academic/Calendars/Show', [
-            'calendar' => [...$calendar->toArray(), 'is_shared' => $calendar->isShared()],
+            'calendar' => [
+                'id' => $calendar->id,
+                'name' => $calendar->name,
+                'academic_year_label' => $calendar->academic_year_label,
+                'start_date' => $calendar->start_date->format('Y-m-d'),
+                'end_date' => $calendar->end_date->format('Y-m-d'),
+                'timezone' => $calendar->timezone,
+                'status' => $calendar->status,
+                'source_type' => $calendar->source_type,
+                'source_version' => $calendar->source_version,
+                'education_provider' => $calendar->educationProvider,
+                'events' => $calendar->events->map(fn ($event) => $event->only([
+                    'id', 'event_date', 'end_date', 'event_type', 'name', 'instructional_effect', 'status', 'notes', 'source_reference',
+                ])),
+                'is_shared' => $calendar->isShared(),
+            ],
+            'sourceWebsite' => SafeExternalUrl::inspect($calendar->source_url),
             'summaries' => $summaries,
             'linkedSources' => $linkedSources,
+            'suggestedSources' => $suggestedSources,
         ]);
     }
 
@@ -126,16 +154,64 @@ class CalendarProfileController extends Controller
     private function sourceLinks(array $calendarIds)
     {
         return AcademicSourceLink::query()
-            ->with('source:id,title,review_status')
+            ->with(['source.educationProvider:id,name', 'source.currentFile'])
             ->where('link_type', 'calendar_profile')
             ->whereIn('link_id', $calendarIds)
             ->get()
-            ->map(fn ($link) => [
-                'id' => $link->source->id,
+            ->map(fn (AcademicSourceLink $link) => [
+                ...$this->sourcePayload($link->source),
+                'link_id' => $link->id,
                 'calendar_profile_id' => $link->link_id,
-                'title' => $link->source->title,
-                'review_status' => $link->source->review_status,
             ])
             ->groupBy('calendar_profile_id');
+    }
+
+    private function compatibleSources(CalendarProfile $calendar)
+    {
+        return AcademicSource::query()
+            ->with(['educationProvider:id,name', 'currentFile'])
+            ->whereNull('archived_at')
+            ->where('source_category', 'calendar')
+            ->whereDoesntHave('links', fn ($links) => $links
+                ->where('link_type', 'calendar_profile')
+                ->where('link_id', $calendar->id))
+            ->when($calendar->education_provider_id, fn ($query, $providerId) => $query
+                ->where(fn ($providers) => $providers
+                    ->whereNull('education_provider_id')
+                    ->orWhere('education_provider_id', $providerId)))
+            ->where(function ($query) use ($calendar) {
+                $query->whereHas('schoolYear', fn ($years) => $years
+                    ->whereDate('start_date', '>=', $calendar->start_date->format('Y-m-d'))
+                    ->whereDate('end_date', '<=', $calendar->end_date->format('Y-m-d')));
+
+                if (filled($calendar->academic_year_label)) {
+                    $query->orWhere('academic_year_label', $calendar->academic_year_label);
+                }
+            })
+            ->latest('updated_at')
+            ->get();
+    }
+
+    private function sourcePayload(AcademicSource $source): array
+    {
+        $file = $source->currentFile;
+
+        return [
+            'id' => $source->id,
+            'title' => $source->title,
+            'source_kind' => $source->source_kind,
+            'source_category' => $source->source_category,
+            'authority_level' => $source->authority_level,
+            'review_status' => $source->review_status,
+            'education_provider' => $source->educationProvider,
+            'external_url' => SafeExternalUrl::inspect($source->source_url),
+            'current_file' => $file ? [
+                'id' => $file->id,
+                'original_filename' => $file->original_filename,
+                'is_pdf' => $file->mime_type === 'application/pdf' && $file->extension === 'pdf',
+            ] : null,
+            'can_manage' => Gate::allows('update', $source),
+            'can_download' => Gate::allows('download', $source),
+        ];
     }
 }

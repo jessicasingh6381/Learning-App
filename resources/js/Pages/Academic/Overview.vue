@@ -132,6 +132,10 @@ const selectYear = (event: Event) => {
                                         <template v-else-if="calendarSetup.state === 'source_available'">A source is available to review, but no structured Calendar Profile exists yet.</template>
                                         <template v-else>No Calendar Profile or related source is available yet.</template>
                                         <div class="text-secondary mt-1">{{ calendarSetup.source_count }} related source{{ calendarSetup.source_count === 1 ? '' : 's' }}</div>
+                                        <div v-if="calendarSetup.selected_profile_has_source_website && calendarSetup.unlinked_source_count > 0" class="alert alert-light border py-2 mt-2 mb-0">
+                                            Profile available with a source website. {{ calendarSetup.unlinked_source_count === 1 ? 'One' : calendarSetup.unlinked_source_count }} related source document{{ calendarSetup.unlinked_source_count === 1 ? ' is' : 's are' }} not linked.
+                                            <div class="d-flex gap-3 mt-1"><Link :href="route('academic.calendars.show', calendarSetup.selected_profile_id)">View profile</Link><Link v-if="canManage" :href="route('academic.calendars.show', calendarSetup.selected_profile_id)">Link source</Link></div>
+                                        </div>
                                         <div v-if="!complete && (calendarSetup.can_view_sources || canManage)" class="d-flex flex-wrap gap-2 mt-2 align-items-center">
                                             <Link v-if="calendarSetup.source_count === 0 && calendarSetup.can_create_source" :href="route('academic.sources.create', { category: 'calendar', school_year_id: schoolYear.id, education_provider_id: configuration?.education_provider_id })">Add source</Link>
                                             <Link v-else-if="calendarSetup.single_source" :href="route('academic.sources.show', calendarSetup.single_source.id)">{{ calendarSetup.single_source.review_status === 'reviewed' ? 'View source' : 'Review source' }}</Link>

@@ -20,7 +20,7 @@ const canManage = usePage<any>().props.auth.permissions.includes('calendars.mana
             <p class="mb-1">{{ calendar.academic_year_label || 'No school-year label' }}</p>
             <p class="text-secondary mb-2">{{ formatDateOnly(calendar.start_date) }} – {{ formatDateOnly(calendar.end_date) }}</p>
             <dl class="row small mb-2"><dt class="col-4">Provider</dt><dd class="col-8">{{ calendar.education_provider?.name ?? 'Not specified' }}</dd><dt class="col-4">Status</dt><dd class="col-8 text-capitalize">{{ calendar.status }}</dd><dt class="col-4">Events</dt><dd class="col-8">{{ calendar.events_count }}</dd></dl>
-            <div v-if="calendar.linked_sources.length" class="alert alert-light border py-2 mb-0"><strong>{{ calendar.linked_sources.length }} linked source{{ calendar.linked_sources.length === 1 ? '' : 's' }}</strong><div><Link v-for="source in calendar.linked_sources" :key="source.id" class="me-2" :href="route('academic.sources.show', source.id)">{{ source.title }}</Link></div></div>
+            <p class="small text-secondary mb-0">{{ calendar.has_source_website ? 'Source website' : 'No source website' }} · {{ calendar.linked_sources.length ? `${calendar.linked_sources.length} linked document${calendar.linked_sources.length === 1 ? '' : 's'}` : 'No linked sources' }}</p>
         </div><div class="card-footer bg-white d-flex gap-2"><Link class="btn btn-sm btn-outline-primary" :href="route('academic.calendars.show', calendar.id)">View</Link><Link v-if="canManage && !calendar.is_shared" class="btn btn-sm btn-outline-secondary" :href="route('academic.calendars.edit', calendar.id)">Edit</Link></div></div></div></div>
     </AuthenticatedLayout>
 </template>

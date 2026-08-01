@@ -17,6 +17,7 @@ use App\Models\SchoolYear;
 use App\Models\StandardsFramework;
 use App\Services\AuditService;
 use App\Services\PermissionService;
+use App\Support\SafeExternalUrl;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -74,6 +75,13 @@ class AcademicOverviewController extends Controller
             ->where('link_type', 'calendar_profile')
             ->pluck('link_id');
         $linkedCalendars = $eligibleCalendars->whereIn('id', $linkedCalendarIds);
+        $selectedCalendarSourceIds = $configuration?->calendar_profile_id
+            ? AcademicSourceLink::query()
+                ->where('link_type', 'calendar_profile')
+                ->where('link_id', $configuration->calendar_profile_id)
+                ->pluck('academic_source_id')
+            : collect();
+        $unlinkedCalendarSources = $calendarSources->whereNotIn('id', $selectedCalendarSourceIds);
         $calendarComplete = $schoolYear && $configuration?->calendarProfile
             ? $calendarCompatibility->supports(
                 $configuration->calendarProfile,
@@ -127,6 +135,9 @@ class AcademicOverviewController extends Controller
                 'source_count' => $calendarSources->count(),
                 'profile_count' => $eligibleCalendars->count(),
                 'linked_profile_count' => $linkedCalendars->count(),
+                'selected_profile_id' => $configuration?->calendar_profile_id,
+                'selected_profile_has_source_website' => SafeExternalUrl::inspect($configuration?->calendarProfile?->source_url) !== null,
+                'unlinked_source_count' => $configuration?->calendar_profile_id ? $unlinkedCalendarSources->count() : 0,
                 'can_view_sources' => app(PermissionService::class)->allows('academic-sources.view'),
                 'can_create_source' => app(PermissionService::class)->allows('academic-sources.create'),
                 'single_source' => $calendarSources->count() === 1 ? $calendarSources->first()->only([

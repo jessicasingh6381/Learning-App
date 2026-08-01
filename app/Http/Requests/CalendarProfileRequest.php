@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Http\Requests\Concerns\ValidatesAcademicOwnership;
+use App\Rules\SafeAcademicSourceUrl;
 use App\Rules\ValidStatusTransition;
 use App\Tenancy\TenantContext;
 use Illuminate\Database\Query\Builder;
@@ -49,7 +50,7 @@ class CalendarProfileRequest extends FormRequest
                 ]),
             ],
             'source_type' => ['required', Rule::in(['provider', 'tenant_custom', 'imported', 'manual'])],
-            'source_url' => ['nullable', 'url', 'max:2048'],
+            'source_url' => ['nullable', new SafeAcademicSourceUrl],
             'source_version' => ['nullable', 'string', 'max:100'],
             'notes' => ['nullable', 'string', 'max:5000'],
         ];
