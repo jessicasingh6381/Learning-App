@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class CalendarEvent extends Model
 {
     protected $fillable = [
-        'calendar_profile_id', 'event_date', 'end_date', 'event_type', 'name',
+        'calendar_profile_id', 'calendar_import_id', 'calendar_import_proposal_id', 'event_date', 'end_date', 'event_type', 'name',
         'instructional_effect', 'status', 'notes', 'source_reference',
     ];
 
@@ -26,5 +26,15 @@ class CalendarEvent extends Model
     public function calendarProfile(): BelongsTo
     {
         return $this->belongsTo(CalendarProfile::class);
+    }
+
+    public function calendarImport(): BelongsTo
+    {
+        return $this->belongsTo(CalendarImport::class);
+    }
+
+    public function importProposal(): BelongsTo
+    {
+        return $this->belongsTo(CalendarImportProposal::class, 'calendar_import_proposal_id');
     }
 }

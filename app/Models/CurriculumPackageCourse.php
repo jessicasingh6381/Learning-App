@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CurriculumPackageCourse extends Model
 {
@@ -41,5 +42,15 @@ class CurriculumPackageCourse extends Model
     public function gradeLevel(): BelongsTo
     {
         return $this->belongsTo(GradeLevel::class);
+    }
+
+    public function curriculumPeriods(): HasMany
+    {
+        return $this->hasMany(CurriculumPeriod::class)->orderBy('sequence');
+    }
+
+    public function curriculumImports(): HasMany
+    {
+        return $this->hasMany(CurriculumImport::class);
     }
 }

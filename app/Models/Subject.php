@@ -21,4 +21,9 @@ class Subject extends Model
     {
         return $this->hasMany(Course::class);
     }
+
+    public function learningPlanPreferences(): HasMany
+    {
+        return $this->hasMany(LearningPlanSubjectPreference::class);
+    }
 }

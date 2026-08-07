@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import CalendarLifecycleActions from '@/Components/CalendarLifecycleActions.vue';
 import CalendarShow from './Calendars/Show.vue';
+import CalendarImportShow from './CalendarImports/Show.vue';
 import CalendarsIndex from './Calendars/Index.vue';
 import CalendarForm from './Calendars/Form.vue';
 import CurriculumShow from './Curriculum/Show.vue';
@@ -16,10 +17,14 @@ import SourcesShow from './Sources/Show.vue';
 const state = vi.hoisted(() => ({
     permissions: [] as string[],
     post: vi.fn(),
+    put: vi.fn(),
     patch: vi.fn(),
     remove: vi.fn(),
+    routerOn: vi.fn((_event?: string, _callback?: (event: { preventDefault: () => void }) => void) => vi.fn()),
+    routerDelete: vi.fn(),
     processing: false,
     errors: {} as Record<string, string>,
+    forms: [] as Array<Record<string, any>>,
 }));
 
 vi.mock('@inertiajs/vue3', () => ({
@@ -28,7 +33,7 @@ vi.mock('@inertiajs/vue3', () => ({
         props: ['href'],
         template: '<a :href="href"><slot /></a>',
     },
-    router: { get: vi.fn() },
+    router: { get: vi.fn(), on: state.routerOn, delete: state.routerDelete },
     usePage: () => ({
         props: {
             auth: { permissions: state.permissions, user: { name: 'Adult User' } },
@@ -43,11 +48,13 @@ vi.mock('@inertiajs/vue3', () => ({
             errors: state.errors,
             processing: state.processing,
             post: state.post,
+            put: state.put,
             patch: state.patch,
             delete: state.remove,
             reset: vi.fn(),
             clearErrors: vi.fn(),
         });
+        state.forms.push(form);
         return form;
     },
 }));
@@ -70,10 +77,14 @@ describe('Academic setup UI', () => {
     beforeEach(() => {
         state.permissions = [];
         state.post.mockReset();
+        state.put.mockReset();
         state.patch.mockReset();
         state.remove.mockReset();
+        state.routerOn.mockClear();
+        state.routerDelete.mockReset();
         state.processing = false;
         state.errors = {};
+        state.forms = [];
     });
 
     it('keeps advanced academic setup in Settings and hides it from unauthorized adults', () => {
@@ -493,5 +504,113 @@ describe('Academic setup UI', () => {
         expect(wrapper.text()).toContain('This version is protected.');
         expect(wrapper.text()).toContain('No courses mapped.');
         expect(wrapper.find('#mapping-course').exists()).toBe(false);
+    });
+
+    it('tracks the bulk calendar review as dirty, saves all rows, and blocks stale approval', async () => {
+        const wrapper = mount(CalendarImportShow, {
+            props: {
+                calendarImport: { id: 12, status: 'review_required', extraction_method: 'text', parser_version: 'test', previous_approved_count: 0, proposed_first_day: null, proposed_last_day: null, comparison: null },
+                source: { id: 4, title: 'District calendar', file: { name: 'calendar.pdf' } },
+                schoolYear: { start_date: '2026-08-12', end_date: '2027-05-27' },
+                proposals: [
+                    { id: 21, event_date: '2026-09-07', end_date: null, name: 'Holiday', event_type: 'holiday', instructional_effect: 'non_instructional', included: true, parser_note: null, source_page: 1, raw_text: null, warnings: [] },
+                    { id: 22, event_date: '2026-10-09', end_date: null, name: 'Workday', event_type: 'teacher_workday', instructional_effect: 'non_instructional', included: true, parser_note: null, source_page: 1, raw_text: null, warnings: [] },
+                ],
+                eventTypes: ['holiday', 'teacher_workday'], effects: ['non_instructional'], canManage: true, canRetry: false, canDelete: true, linkedEventsCount: 0,
+            },
+            global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub } },
+        });
+
+        const actionButtons = () => wrapper.findAll('.card.border-primary button');
+        expect(actionButtons()[0].attributes('disabled')).toBeDefined();
+        expect(wrapper.text()).not.toContain('Unsaved changes');
+        expect(wrapper.findAll('button').filter(button => button.text() === 'Save')).toHaveLength(0);
+
+        await wrapper.get('input[aria-label="Include Workday"]').setValue(false);
+        await wrapper.get('input[aria-label="Include Holiday"]').setValue(false);
+        await wrapper.get('input[aria-label="Include Holiday"]').setValue(true);
+        expect(wrapper.text()).toContain('Unsaved changes');
+        expect(wrapper.text()).toContain('Save your review changes before approving this import.');
+        expect(actionButtons()[0].attributes('disabled')).toBeUndefined();
+        expect(actionButtons()[1].attributes('disabled')).toBeDefined();
+        await actionButtons()[1].trigger('click');
+        expect(state.post).not.toHaveBeenCalled();
+
+        await actionButtons()[0].trigger('click');
+        const reviewForm = state.forms.find(form => 'proposals' in form);
+        expect(reviewForm?.proposals[21].included).toBe(true);
+        expect(reviewForm?.proposals[22].included).toBe(false);
+        expect(state.put).toHaveBeenCalledWith('academic.calendar-imports.proposals.bulk-update:12', expect.objectContaining({ preserveScroll: true }));
+        expect(state.patch).not.toHaveBeenCalled();
+
+        const saveOptions = state.put.mock.calls[0][1];
+        saveOptions.onSuccess();
+        await wrapper.vm.$nextTick();
+        expect(wrapper.text()).not.toContain('Unsaved changes');
+        expect(actionButtons()[0].attributes('disabled')).toBeDefined();
+        expect(actionButtons()[1].attributes('disabled')).toBeUndefined();
+    });
+
+    it('keeps failed bulk edits visible and displays their row-specific errors', async () => {
+        state.errors = { 'proposals.22.name': 'The name field is required.' };
+        const wrapper = mount(CalendarImportShow, {
+            props: {
+                calendarImport: { id: 12, status: 'review_required', extraction_method: 'text', parser_version: 'test', previous_approved_count: 0, proposed_first_day: null, proposed_last_day: null, comparison: null },
+                source: { id: 4, title: 'District calendar', file: { name: 'calendar.pdf' } },
+                schoolYear: { start_date: '2026-08-12', end_date: '2027-05-27' },
+                proposals: [{ id: 22, event_date: '2026-10-09', end_date: null, name: 'Workday', event_type: 'teacher_workday', instructional_effect: 'non_instructional', included: true, parser_note: null, source_page: 1, raw_text: null, warnings: [] }],
+                eventTypes: ['teacher_workday'], effects: ['non_instructional'], canManage: true, canRetry: false, canDelete: false, linkedEventsCount: 0,
+            },
+            global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub } },
+        });
+        const name = wrapper.get('tbody tr td:nth-child(3) input');
+        await name.setValue('');
+        expect((name.element as HTMLInputElement).value).toBe('');
+        expect(wrapper.text()).toContain('Review changes were not saved.');
+        expect(wrapper.text()).toContain('The name field is required.');
+        expect(name.classes()).toContain('is-invalid');
+    });
+
+    it('warns before navigating away from unsaved calendar review changes', async () => {
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        const wrapper = mount(CalendarImportShow, {
+            props: {
+                calendarImport: { id: 12, status: 'review_required', extraction_method: 'text', parser_version: 'test', previous_approved_count: 0, proposed_first_day: null, proposed_last_day: null, comparison: null },
+                source: { id: 4, title: 'District calendar', file: { name: 'calendar.pdf' } },
+                schoolYear: { start_date: '2026-08-12', end_date: '2027-05-27' },
+                proposals: [{ id: 22, event_date: '2026-10-09', end_date: null, name: 'Workday', event_type: 'teacher_workday', instructional_effect: 'non_instructional', included: true, parser_note: null, source_page: 1, raw_text: null, warnings: [] }],
+                eventTypes: ['teacher_workday'], effects: ['non_instructional'], canManage: true, canRetry: false, canDelete: false, linkedEventsCount: 0,
+            },
+            global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub } },
+        });
+        await wrapper.get('input[aria-label="Include Workday"]').setValue(false);
+        const before = state.routerOn.mock.calls.find(([event]) => event === 'before')?.[1];
+        const event = { preventDefault: vi.fn() };
+        before?.(event);
+        expect(confirm).toHaveBeenCalledWith('You have unsaved review changes. Leave without saving them?');
+        expect(event.preventDefault).toHaveBeenCalled();
+        wrapper.unmount();
+        confirm.mockRestore();
+    });
+
+    it('renders an approved calendar import as a read-only summary without an approval button', () => {
+        const wrapper = mount(CalendarImportShow, {
+            props: {
+                calendarImport: { id: 12, status: 'approved', extraction_method: 'text', parser_version: 'test', proposed_first_day: null, proposed_last_day: null, comparison: null, events_created_count: 1, included_count: 1, excluded_count: 1, approved_at: '2026-08-03T12:00:00Z', approved_by: 'Owner User' },
+                source: { id: 4, title: 'District calendar', file: { name: 'calendar.pdf' } },
+                schoolYear: { start_date: '2026-08-12', end_date: '2027-05-27' },
+                proposals: [{ id: 21, event_date: '2026-09-07', end_date: null, name: 'Holiday', event_type: 'holiday', instructional_effect: 'non_instructional', included: true, parser_note: null, source_page: 1, raw_text: null, warnings: [] }],
+                eventTypes: ['holiday'], effects: ['non_instructional'], canManage: false, canRetry: false, canDelete: false, linkedEventsCount: 1,
+            },
+            global: { stubs: { AuthenticatedLayout: layoutStub, AcademicNav: academicNavStub } },
+        });
+
+        expect(wrapper.text()).toContain('Approved');
+        expect(wrapper.text()).toContain('1 calendar events created');
+        expect(wrapper.text()).toContain('Owner User');
+        expect(wrapper.text()).toContain('Open live calendar');
+        expect(wrapper.text()).not.toContain('Approve import');
+        expect(wrapper.text()).not.toContain('Save review changes');
+        expect(wrapper.find('button.btn-primary').exists()).toBe(false);
     });
 });

@@ -30,7 +30,10 @@ class WorkspaceController extends Controller
             ?? collect($data['students'])->first();
         $intake = $curriculumIntake->build($data['selectedStudent']['id'] ?? null, $data['schoolYear']['id'] ?? null);
         $data['curriculumBySubject'] = $intake['subjects'];
+        $data['hiddenCurriculumSubjects'] = $intake['hiddenSubjects'];
+        $data['hiddenCurriculumSubjectCount'] = $intake['hiddenSubjectCount'];
         $data['curriculumIntakeAvailable'] = $intake['permissions']['create'];
+        $data['curriculumVisibilityManageable'] = $intake['permissions']['manage_visibility'];
 
         return Inertia::render('Workspace/LearningPlan', $data);
     }

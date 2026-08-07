@@ -8,10 +8,20 @@ use App\Models\AcademicSourceLink;
 use App\Models\AcademicYearConfiguration;
 use App\Models\AuditLog;
 use App\Models\CalendarEvent;
+use App\Models\CalendarImport;
+use App\Models\CalendarImportProposal;
 use App\Models\CalendarProfile;
 use App\Models\Course;
 use App\Models\CurriculumPackage;
 use App\Models\CurriculumPackageCourse;
+use App\Models\CurriculumImport;
+use App\Models\CurriculumFormatProfile;
+use App\Models\CurriculumImportProposal;
+use App\Models\CurriculumPeriod;
+use App\Models\CurriculumUnit;
+use App\Models\CurriculumUnitComponent;
+use App\Models\CurriculumUnitStandardAlignment;
+use App\Models\Standard;
 use App\Models\EducationProvider;
 use App\Models\SchoolYear;
 use App\Models\StandardsFramework;
@@ -43,12 +53,22 @@ class AuditService
         TenantMembership::class => ['user_id', 'role', 'status'],
         EducationProvider::class => ['name', 'short_name', 'provider_type', 'state_or_region', 'country_code', 'website_url', 'status'],
         CalendarProfile::class => ['education_provider_id', 'name', 'academic_year_label', 'start_date', 'end_date', 'timezone', 'status', 'source_type', 'source_url', 'source_version'],
-        CalendarEvent::class => ['calendar_profile_id', 'event_date', 'end_date', 'event_type', 'name', 'instructional_effect', 'status', 'source_reference'],
+        CalendarEvent::class => ['calendar_profile_id', 'calendar_import_id', 'calendar_import_proposal_id', 'event_date', 'end_date', 'event_type', 'name', 'instructional_effect', 'status', 'source_reference'],
+        CalendarImport::class => ['academic_source_id', 'academic_source_file_id', 'school_year_id', 'calendar_profile_id', 'status', 'extraction_method', 'parser_version', 'proposed_first_day', 'proposed_last_day', 'update_school_year_dates', 'approved_by_user_id', 'approved_at'],
+        CalendarImportProposal::class => ['calendar_import_id', 'event_date', 'end_date', 'name', 'event_type', 'instructional_effect', 'confidence', 'source_page', 'included', 'manually_edited'],
         StandardsFramework::class => ['education_provider_id', 'name', 'short_name', 'jurisdiction', 'version_label', 'effective_start_date', 'effective_end_date', 'status', 'source_url'],
         Subject::class => ['name', 'code', 'sort_order', 'status'],
         Course::class => ['subject_id', 'standards_framework_id', 'education_provider_id', 'name', 'code', 'minimum_grade_level_id', 'maximum_grade_level_id', 'status'],
         CurriculumPackage::class => ['education_provider_id', 'standards_framework_id', 'name', 'version_label', 'status', 'effective_start_date', 'effective_end_date', 'source_url'],
         CurriculumPackageCourse::class => ['curriculum_package_id', 'course_id', 'grade_level_id', 'sort_order', 'required'],
+        CurriculumImport::class => ['academic_source_id', 'academic_source_file_id', 'curriculum_package_id', 'curriculum_package_course_id', 'subject_id', 'grade_level_id', 'school_year_id', 'standards_framework_id', 'import_type', 'import_context_key', 'status', 'parser_key', 'parser_version', 'extraction_method', 'source_title', 'source_revision_date', 'document_section', 'adopted_label', 'introduction_text', 'document_metadata', 'diagnostic', 'review_version', 'approved_by_user_id', 'approved_at'],
+        CurriculumFormatProfile::class => ['tenant_id', 'ownership_scope', 'education_provider_id', 'subject_id', 'minimum_grade_level_id', 'maximum_grade_level_id', 'example_academic_source_id', 'example_academic_source_file_id', 'name', 'document_family', 'file_type', 'recognition_fingerprints', 'mapping_rules', 'profile_version', 'status', 'created_by_user_id', 'reviewed_by_user_id', 'activated_at'],
+        CurriculumImportProposal::class => ['curriculum_import_id', 'extraction_generation', 'parent_proposal_id', 'proposal_type', 'included', 'sequence', 'name', 'description', 'summary', 'planned_start_date', 'planned_end_date', 'estimated_days', 'unit_type', 'component_type', 'reporting_period', 'standard_codes', 'strand', 'standard_code', 'normalized_code', 'statement', 'confidence', 'source_page', 'manually_edited', 'superseded_at'],
+        CurriculumPeriod::class => ['curriculum_package_course_id', 'name', 'sequence', 'planned_start_date', 'planned_end_date', 'period_type', 'status', 'academic_source_id', 'academic_source_file_id', 'curriculum_import_id', 'curriculum_import_proposal_id'],
+        CurriculumUnit::class => ['curriculum_period_id', 'curriculum_package_course_id', 'name', 'summary', 'sequence', 'planned_start_date', 'planned_end_date', 'estimated_days', 'unit_type', 'included', 'academic_source_id', 'academic_source_file_id', 'curriculum_import_id', 'curriculum_import_proposal_id'],
+        CurriculumUnitComponent::class => ['curriculum_unit_id', 'parent_component_id', 'component_type', 'name', 'description', 'sequence', 'planned_start_date', 'planned_end_date', 'academic_source_id', 'academic_source_file_id', 'curriculum_import_id', 'curriculum_import_proposal_id'],
+        CurriculumUnitStandardAlignment::class => ['curriculum_unit_id', 'standards_framework_id', 'standard_id', 'standard_code', 'normalized_code', 'academic_source_id', 'academic_source_file_id', 'curriculum_import_id', 'curriculum_import_proposal_id'],
+        Standard::class => ['tenant_id', 'ownership_key', 'standards_framework_id', 'subject_id', 'grade_level_id', 'parent_standard_id', 'record_type', 'title', 'standard_code', 'normalized_code', 'strand', 'statement', 'sequence', 'version_label', 'adopted_label', 'effective_label', 'status', 'academic_source_id', 'academic_source_file_id', 'curriculum_import_id', 'curriculum_import_proposal_id'],
         AcademicYearConfiguration::class => ['school_year_id', 'education_provider_id', 'calendar_profile_id', 'standards_framework_id', 'curriculum_package_id', 'status', 'configured_by_user_id', 'configured_at'],
         AcademicSource::class => [
             'education_provider_id', 'school_year_id', 'grade_level_id', 'title', 'source_kind',

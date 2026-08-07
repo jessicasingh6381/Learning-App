@@ -38,4 +38,9 @@ class CurriculumPackage extends Model
     {
         return $this->hasMany(CurriculumPackageCourse::class)->orderBy('sort_order');
     }
+
+    public function curriculumImports(): HasMany
+    {
+        return $this->hasMany(CurriculumImport::class);
+    }
 }

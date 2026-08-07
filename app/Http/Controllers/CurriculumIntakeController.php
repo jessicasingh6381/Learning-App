@@ -5,7 +5,10 @@ namespace App\Http\Controllers;
 use App\Http\Requests\CurriculumIntakeRequest;
 use App\Models\AcademicSource;
 use App\Models\CurriculumPackage;
+use App\Models\SchoolYear;
+use App\Models\Student;
 use App\Models\StudentEnrollment;
+use App\Models\Subject;
 use App\Services\AcademicSourceFileService;
 use App\Services\AcademicSourceLinkService;
 use App\Services\AuditService;
@@ -20,17 +23,54 @@ use Inertia\Response;
 
 class CurriculumIntakeController extends Controller
 {
-    public function index(Request $request, CurriculumIntakeService $intake): Response
+    public function index(Request $request, CurriculumIntakeService $intake): Response|RedirectResponse
     {
         Gate::authorize('create', AcademicSource::class);
+
+        if ($request->filled(['student_id', 'school_year_id', 'subject_id'])) {
+            $context = $intake->buildAdd(
+                $request->integer('student_id'),
+                $request->integer('school_year_id'),
+                $request->integer('subject_id'),
+            );
+
+            return redirect()->route('workspace.curriculum-intake.subject.create', [
+                'student' => $context['selectedContext']['student_id'],
+                'schoolYear' => $context['selectedContext']['school_year_id'],
+                'subject' => $context['selectedSubject']['id'],
+            ]);
+        }
 
         $data = $intake->build($request->integer('student_id') ?: null, $request->integer('school_year_id') ?: null);
 
         return Inertia::render('Workspace/CurriculumIntake', [
             ...$data,
-            'selectedSubjectId' => collect($data['subjects'])->contains('id', $request->integer('subject_id'))
-                ? $request->integer('subject_id')
-                : null,
+            'entryMode' => 'overview',
+            'selectedSubject' => null,
+            'contextProvider' => null,
+            'backUrl' => route('workspace.learning-plan', $data['selectedContext'] ? ['student_id' => $data['selectedContext']['student_id']] : []),
+            'maxUploadMegabytes' => (int) config('academic_sources.max_upload_kilobytes') / 1024,
+        ]);
+    }
+
+    public function create(
+        Request $request,
+        Student $student,
+        SchoolYear $schoolYear,
+        Subject $subject,
+        CurriculumIntakeService $intake,
+    ): Response {
+        Gate::authorize('create', AcademicSource::class);
+        $data = $intake->buildAdd($student->id, $schoolYear->id, $subject->id);
+        $fromOverview = $request->query('from') === 'overview';
+
+        return Inertia::render('Workspace/CurriculumIntake', [
+            ...$data,
+            'entryMode' => 'add',
+            'backUrl' => $fromOverview
+                ? route('workspace.curriculum-intake', ['student_id' => $student->id, 'school_year_id' => $schoolYear->id])
+                : route('workspace.learning-plan', ['student_id' => $student->id]),
+            'returnTo' => $fromOverview ? 'overview' : 'learning-plan',
             'maxUploadMegabytes' => (int) config('academic_sources.max_upload_kilobytes') / 1024,
         ]);
     }
@@ -50,6 +90,59 @@ class CurriculumIntakeController extends Controller
         $upload = $request->file('source_file');
         $providerId = in_array($data['source_origin'], ['provider', 'publisher'], true) ? $data['education_provider_id'] : null;
 
+        $this->persist($data, $enrollment, $upload, $providerId, $audit, $files, $links);
+
+        return redirect()->route('workspace.curriculum-intake', [
+            'student_id' => $data['student_id'],
+            'school_year_id' => $data['school_year_id'],
+        ])->with('success', 'Curriculum source added. Review it before starting a curriculum outline.');
+    }
+
+    public function storeSubject(
+        CurriculumIntakeRequest $request,
+        Student $student,
+        SchoolYear $schoolYear,
+        Subject $subject,
+        CurriculumIntakeService $intake,
+        AuditService $audit,
+        AcademicSourceFileService $files,
+        AcademicSourceLinkService $links,
+    ): RedirectResponse {
+        $context = $intake->buildAdd($student->id, $schoolYear->id, $subject->id);
+        $provider = $context['contextProvider'];
+        $data = [
+            ...$request->validated(),
+            'student_id' => $student->id,
+            'school_year_id' => $schoolYear->id,
+            'subject_id' => $subject->id,
+            'source_origin' => $provider
+                ? ($provider['provider_type'] === 'curriculum_publisher' ? 'publisher' : 'provider')
+                : 'custom',
+            'education_provider_id' => $provider['id'] ?? null,
+        ];
+        $enrollment = StudentEnrollment::query()
+            ->where('student_id', $student->id)
+            ->where('school_year_id', $schoolYear->id)
+            ->whereIn('status', ['planned', 'active'])
+            ->firstOrFail();
+
+        $this->persist($data, $enrollment, $request->file('source_file'), $provider['id'] ?? null, $audit, $files, $links);
+
+        return redirect()->route('workspace.curriculum-intake', [
+            'student_id' => $student->id,
+            'school_year_id' => $schoolYear->id,
+        ])->with('success', 'Curriculum source added. Review it before starting a curriculum outline.');
+    }
+
+    private function persist(
+        array $data,
+        StudentEnrollment $enrollment,
+        mixed $upload,
+        ?int $providerId,
+        AuditService $audit,
+        AcademicSourceFileService $files,
+        AcademicSourceLinkService $links,
+    ): void {
         DB::transaction(function () use ($data, $enrollment, $upload, $providerId, $audit, $files, $links): void {
             $source = AcademicSource::create([
                 'education_provider_id' => $providerId,
@@ -83,12 +176,6 @@ class CurriculumIntakeController extends Controller
                 $files->store($source, $upload, $audit);
             }
         });
-
-        return redirect()->route('workspace.curriculum-intake', [
-            'student_id' => $data['student_id'],
-            'school_year_id' => $data['school_year_id'],
-            'subject_id' => $data['subject_id'],
-        ])->with('success', 'Curriculum source added. Review it before starting a curriculum outline.');
     }
 
     public function createDraft(

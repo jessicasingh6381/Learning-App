@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\HasAcademicVisibility;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class StandardsFramework extends Model
 {
@@ -27,4 +28,6 @@ class StandardsFramework extends Model
     {
         return $this->belongsTo(EducationProvider::class);
     }
+
+    public function standards(): HasMany { return $this->hasMany(Standard::class); }
 }

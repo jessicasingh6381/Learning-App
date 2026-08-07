@@ -22,7 +22,8 @@ class CalendarEventRequest extends FormRequest
             'event_type' => ['required', Rule::in([
                 'holiday', 'break', 'teacher_workday', 'staff_development', 'weather_closure',
                 'tenant_day_off', 'district_closure', 'instructional_makeup_day',
-                'instructional_override', 'other',
+                'instructional_override', 'student_holiday', 'professional_development',
+                'early_release', 'first_day', 'last_day', 'school_closure', 'makeup_day', 'other',
             ])],
             'name' => ['required', 'string', 'max:255'],
             'instructional_effect' => ['required', Rule::in(['non_instructional', 'instructional', 'informational'])],

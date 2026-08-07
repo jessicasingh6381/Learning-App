@@ -16,6 +16,8 @@ use App\Models\AcademicYearConfiguration;
 use App\Models\CalendarProfile;
 use App\Models\Course;
 use App\Models\CurriculumPackage;
+use App\Models\CurriculumFormatProfile;
+use App\Contracts\StandardsDocumentParser;
 use App\Models\EducationProvider;
 use App\Models\GradeLevel;
 use App\Models\SchoolYear;
@@ -24,6 +26,8 @@ use App\Models\Subject;
 use App\Services\AcademicSourceFileService;
 use App\Services\AcademicSourceLinkService;
 use App\Services\AuditService;
+use App\Services\CalendarImportLifecycleService;
+use App\Services\CurriculumParserCapabilityService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -134,13 +138,81 @@ class AcademicSourceController extends Controller
         return redirect()->route('academic.sources.show', $source)->with('success', 'Academic source added for review.');
     }
 
-    public function show(AcademicSource $source, AcademicSourceLinkService $links): Response
+    public function show(
+        AcademicSource $source,
+        AcademicSourceLinkService $links,
+        CurriculumParserCapabilityService $capabilities,
+    ): Response
     {
         Gate::authorize('view', $source);
-        $source->load(['educationProvider:id,name', 'schoolYear:id,name,start_date,end_date,timezone', 'gradeLevel:id,name', 'files', 'currentFile', 'links']);
+        $source->load([
+            'educationProvider:id,name', 'schoolYear:id,name,start_date,end_date,timezone',
+            'gradeLevel:id,name', 'files', 'currentFile', 'links',
+            'calendarImports' => fn ($query) => $query->withCount(['proposals', 'events']),
+            'curriculumImports' => fn ($query) => $query
+                ->with('packageCourse.curriculumPackage:id,name')
+                ->withCount(['proposals', 'periods', 'units']),
+            'curriculumParserCapabilities',
+        ]);
         $linkedCalendars = CalendarProfile::query()
             ->whereIn('id', $source->links->where('link_type', 'calendar_profile')->pluck('link_id'))
             ->get(['id', 'name', 'status']);
+        $subjectId = $source->links->firstWhere('link_type', 'subject')?->link_id;
+        $subject = $subjectId ? Subject::query()->whereKey($subjectId)->first() : null;
+        $isCurriculum = in_array($source->source_category, ['curriculum', 'pacing', 'scope_and_sequence'], true);
+        $currentStandardsImport = $source->curriculumImports->where('import_type', 'standards')
+            ->where('status', '!=', 'superseded')->sortByDesc('id')->first();
+        $currentCurriculumImport = $source->curriculumImports->where('import_type', 'curriculum_outline')
+            ->where('status', '!=', 'superseded')
+            ->sortByDesc(fn ($import) => sprintf('%020d-%020d', $import->created_at?->getTimestamp() ?? 0, $import->id))
+            ->first();
+        $outlineExists = $currentCurriculumImport
+            && $currentCurriculumImport->periods_count > 0
+            && $currentCurriculumImport->units_count > 0;
+        $capability = $capabilities->cached($source);
+        $supportedParser = $capability->state === 'supported' && $capability->parserKey && $capability->parserVersion
+            ? $capabilities->parser($capability) : null;
+        $isStandardsDocument = $supportedParser instanceof StandardsDocumentParser;
+        $standardsActionLabel = 'Import '.($source->gradeLevel?->name ?? 'selected grade').' '.($subject?->name ?? 'subject').' standards';
+        $formatProfile = $source->currentFile ? CurriculumFormatProfile::query()->where('example_academic_source_file_id', $source->currentFile->id)->first() : null;
+        [$curriculumState, $curriculumActionLabel, $curriculumActionUrl] = match (true) {
+            $currentStandardsImport?->status === 'approved' => [
+                'standards_imported', 'View imported standards', route('academic.standards-imports.show', $currentStandardsImport),
+            ],
+            $currentStandardsImport?->status === 'review' => [
+                'standards_review', 'Review Grade 5 standards', route('academic.standards-imports.show', $currentStandardsImport),
+            ],
+            in_array($currentStandardsImport?->status, ['pending', 'processing'], true) => [
+                'standards_processing', 'View standards import', route('academic.standards-imports.show', $currentStandardsImport),
+            ],
+            $currentStandardsImport !== null => [
+                'standards_failed', 'Review standards import issue', route('academic.standards-imports.show', $currentStandardsImport),
+            ],
+            $currentCurriculumImport?->status === 'approved' && $outlineExists => [
+                'approved', 'View curriculum outline', route('academic.curriculum.show', $currentCurriculumImport->curriculum_package_id),
+            ],
+            $currentCurriculumImport?->status === 'approved' => [
+                'failed', 'Review import issue', route('academic.curriculum-imports.show', $currentCurriculumImport),
+            ],
+            $currentCurriculumImport?->status === 'review' => [
+                'review', 'Review curriculum outline', route('academic.curriculum-imports.show', $currentCurriculumImport),
+            ],
+            in_array($currentCurriculumImport?->status, ['pending', 'processing'], true) => [
+                'processing', 'View import status', route('academic.curriculum-imports.show', $currentCurriculumImport),
+            ],
+            $currentCurriculumImport !== null => [
+                'failed', 'Review import issue', route('academic.curriculum-imports.show', $currentCurriculumImport),
+            ],
+            $capability->state === 'supported' && $isStandardsDocument => ['standards_ready', $standardsActionLabel, route('academic.sources.standards-imports.store', $source)],
+            $capability->state === 'supported' => ['ready', 'Create curriculum outline', route('academic.sources.curriculum-imports.store', $source)],
+            $capability->state === 'unknown' => ['unknown', 'Check outline support', route('academic.sources.curriculum-capability.store', $source)],
+            $capability->state === 'unsupported' && $formatProfile?->status === 'draft' => ['format_setup_in_progress', 'Continue document setup', route('academic.curriculum-format-profiles.show', $formatProfile)],
+            $capability->state === 'unsupported' => ['format_setup_needed', 'Set up this document format', route('academic.sources.curriculum-format-setup.create', $source)],
+            $capability->state === 'ambiguous' => ['ambiguous', null, null],
+            default => ['capability_failed', null, null],
+        };
+        $canSetupFormat = Gate::allows('curriculum.manage') && Gate::allows('update', $source);
+        if (in_array($curriculumState, ['format_setup_needed', 'format_setup_in_progress'], true) && ! $canSetupFormat) $curriculumActionUrl = null;
 
         return Inertia::render('Academic/Sources/Show', [
             'source' => $source,
@@ -175,6 +247,37 @@ class AcademicSourceController extends Controller
                 'linked_profiles' => $linkedCalendars,
                 'current_file_is_pdf' => $source->currentFile?->mime_type === 'application/pdf'
                     && $source->currentFile?->extension === 'pdf',
+                'imports' => $source->calendarImports->map(fn ($import) => [
+                    'id' => $import->id, 'status' => $import->status,
+                    'parser_version' => $import->parser_version,
+                    'proposals_count' => $import->proposals_count,
+                    'linked_events_count' => $import->events_count,
+                    'can_delete' => Gate::allows('update', $source)
+                        && CalendarImportLifecycleService::directlyDeletable($import->status, $import->events_count),
+                    'created_at' => $import->created_at?->toIso8601String(),
+                ]),
+            ],
+            'curriculumSetup' => [
+                'is_curriculum' => $isCurriculum,
+                'current_file_is_pdf' => $source->currentFile?->mime_type === 'application/pdf'
+                    && $source->currentFile?->extension === 'pdf',
+                'subject' => $subject ? ['id' => $subject->id, 'name' => $subject->name, 'code' => $subject->code] : null,
+                'workflow_state' => $curriculumState,
+                'primary_action_label' => $curriculumActionLabel,
+                'primary_action_url' => $curriculumActionUrl,
+                'primary_action_method' => in_array($curriculumState, ['ready', 'standards_ready', 'unknown'], true) ? 'post' : 'get',
+                'is_standards_document' => $isStandardsDocument || $currentStandardsImport !== null,
+                'format_profile' => $formatProfile?->only(['id', 'name', 'document_family', 'status', 'profile_version']),
+                'can_setup_format' => $canSetupFormat,
+                'capability' => $capability->toArray(Gate::allows('update', $source)),
+                'back_url' => route('workspace.curriculum-intake', ['school_year_id' => $source->school_year_id]),
+                'imports' => $source->curriculumImports->map(fn ($import) => [
+                    'id' => $import->id,
+                    'status' => $import->status,
+                    'parser_version' => $import->parser_version,
+                    'proposals_count' => $import->proposals_count,
+                    'created_at' => $import->created_at?->toIso8601String(),
+                ]),
             ],
         ]);
     }

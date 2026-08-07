@@ -71,4 +71,19 @@ class AcademicSource extends Model
     {
         return $this->hasMany(AcademicSourceLink::class);
     }
+
+    public function calendarImports(): HasMany
+    {
+        return $this->hasMany(CalendarImport::class)->latest();
+    }
+
+    public function curriculumImports(): HasMany
+    {
+        return $this->hasMany(CurriculumImport::class)->latest();
+    }
+
+    public function curriculumParserCapabilities(): HasMany
+    {
+        return $this->hasMany(CurriculumParserCapability::class)->latest('assessed_at');
+    }
 }

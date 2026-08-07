@@ -3,15 +3,20 @@
 use App\Http\Controllers\Academic\AcademicOverviewController;
 use App\Http\Controllers\Academic\AcademicSourceController;
 use App\Http\Controllers\Academic\CalendarEventController;
+use App\Http\Controllers\Academic\CalendarImportController;
 use App\Http\Controllers\Academic\CalendarProfileController;
 use App\Http\Controllers\Academic\CourseController;
 use App\Http\Controllers\Academic\CurriculumPackageController;
+use App\Http\Controllers\Academic\CurriculumImportController;
+use App\Http\Controllers\Academic\CurriculumFormatProfileController;
+use App\Http\Controllers\Academic\StandardsImportController;
 use App\Http\Controllers\Academic\EducationProviderController;
 use App\Http\Controllers\Academic\StandardsFrameworkController;
 use App\Http\Controllers\Academic\SubjectController;
 use App\Http\Controllers\CurriculumIntakeController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EnrollmentController;
+use App\Http\Controllers\LearningPlanSubjectPreferenceController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SchoolYearController;
 use App\Http\Controllers\StudentAccessController;
@@ -46,8 +51,12 @@ Route::middleware(['auth', 'admin.user'])->group(function () {
 Route::middleware(['auth', 'admin.user', 'tenant'])->group(function () {
     Route::get('/dashboard', [WorkspaceController::class, 'home'])->name('dashboard');
     Route::get('/learning-plan', [WorkspaceController::class, 'learningPlan'])->name('workspace.learning-plan');
+    Route::patch('/learning-plan/enrollments/{enrollment}/subjects/{subject}/hide', [LearningPlanSubjectPreferenceController::class, 'hide'])->name('workspace.learning-plan.subjects.hide');
+    Route::patch('/learning-plan/enrollments/{enrollment}/subjects/{subject}/show', [LearningPlanSubjectPreferenceController::class, 'show'])->name('workspace.learning-plan.subjects.show');
     Route::get('/learning-plan/curriculum-intake', [CurriculumIntakeController::class, 'index'])->name('workspace.curriculum-intake');
     Route::post('/learning-plan/curriculum-intake', [CurriculumIntakeController::class, 'store'])->name('workspace.curriculum-intake.store');
+    Route::get('/learning-plan/curriculum-intake/students/{student}/school-years/{schoolYear}/subjects/{subject}/add', [CurriculumIntakeController::class, 'create'])->name('workspace.curriculum-intake.subject.create');
+    Route::post('/learning-plan/curriculum-intake/students/{student}/school-years/{schoolYear}/subjects/{subject}', [CurriculumIntakeController::class, 'storeSubject'])->name('workspace.curriculum-intake.subject.store');
     Route::post('/learning-plan/curriculum-intake/sources/{source}/draft', [CurriculumIntakeController::class, 'createDraft'])->name('workspace.curriculum-intake.draft');
     Route::get('/calendar', [WorkspaceController::class, 'calendar'])->name('workspace.calendar');
     Route::get('/workspace/{section}', [WorkspaceController::class, 'placeholder'])
@@ -83,8 +92,30 @@ Route::middleware(['auth', 'admin.user', 'tenant'])->group(function () {
         Route::post('/sources/{source}/links', [AcademicSourceController::class, 'addLink'])->name('sources.links.store');
         Route::delete('/sources/{source}/links/{link}', [AcademicSourceController::class, 'removeLink'])->name('sources.links.destroy');
         Route::post('/sources/{source}/draft-calendar', [AcademicSourceController::class, 'createCalendar'])->name('sources.draft-calendar');
+        Route::post('/sources/{source}/calendar-imports', [CalendarImportController::class, 'store'])->name('sources.calendar-imports.store');
+        Route::delete('/sources/{source}/calendar-imports/{calendarImport}', [CalendarImportController::class, 'destroy'])->name('sources.calendar-imports.destroy');
+        Route::get('/calendar-imports/{calendarImport}', [CalendarImportController::class, 'show'])->name('calendar-imports.show');
+        Route::post('/calendar-imports/{calendarImport}/proposals', [CalendarImportController::class, 'storeProposal'])->name('calendar-imports.proposals.store');
+        Route::put('/calendar-imports/{calendarImport}/proposals', [CalendarImportController::class, 'bulkUpdateProposals'])->name('calendar-imports.proposals.bulk-update');
+        Route::patch('/calendar-imports/{calendarImport}/proposals/{proposal}', [CalendarImportController::class, 'updateProposal'])->name('calendar-imports.proposals.update');
+        Route::post('/calendar-imports/{calendarImport}/approve', [CalendarImportController::class, 'approve'])->name('calendar-imports.approve');
         Route::post('/sources/{source}/draft-curriculum', [AcademicSourceController::class, 'createCurriculum'])->name('sources.draft-curriculum');
         Route::post('/sources/{source}/draft-course', [AcademicSourceController::class, 'createCourse'])->name('sources.draft-course');
+        Route::post('/sources/{source}/curriculum-capability', [CurriculumImportController::class, 'assessCapability'])->name('sources.curriculum-capability.store');
+        Route::get('/sources/{source}/curriculum-format-setup', [CurriculumFormatProfileController::class, 'create'])->name('sources.curriculum-format-setup.create');
+        Route::post('/sources/{source}/curriculum-format-setup', [CurriculumFormatProfileController::class, 'store'])->name('sources.curriculum-format-setup.store');
+        Route::post('/sources/{source}/standards-imports', [StandardsImportController::class, 'store'])->name('sources.standards-imports.store');
+        Route::get('/standards-imports/{curriculumImport}', [StandardsImportController::class, 'show'])->name('standards-imports.show');
+        Route::put('/standards-imports/{curriculumImport}/review', [StandardsImportController::class, 'bulkUpdate'])->name('standards-imports.review.update');
+        Route::post('/standards-imports/{curriculumImport}/approve', [StandardsImportController::class, 'approve'])->name('standards-imports.approve');
+        Route::get('/curriculum-format-profiles/{profile}', [CurriculumFormatProfileController::class, 'show'])->name('curriculum-format-profiles.show');
+        Route::put('/curriculum-format-profiles/{profile}', [CurriculumFormatProfileController::class, 'update'])->name('curriculum-format-profiles.update');
+        Route::post('/curriculum-format-profiles/{profile}/activate', [CurriculumFormatProfileController::class, 'activate'])->name('curriculum-format-profiles.activate');
+        Route::post('/sources/{source}/curriculum-imports', [CurriculumImportController::class, 'store'])->name('sources.curriculum-imports.store');
+        Route::get('/curriculum-imports/{curriculumImport}', [CurriculumImportController::class, 'show'])->name('curriculum-imports.show');
+        Route::put('/curriculum-imports/{curriculumImport}/proposals', [CurriculumImportController::class, 'bulkUpdate'])->name('curriculum-imports.proposals.bulk-update');
+        Route::post('/curriculum-imports/{curriculumImport}/reextract', [CurriculumImportController::class, 'reextract'])->name('curriculum-imports.reextract');
+        Route::post('/curriculum-imports/{curriculumImport}/approve', [CurriculumImportController::class, 'approve'])->name('curriculum-imports.approve');
 
         Route::resource('providers', EducationProviderController::class)
             ->except(['show', 'destroy'])

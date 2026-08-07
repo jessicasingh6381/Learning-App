@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Domain\Calendars\CalendarProfileCompatibility;
 use App\Domain\Calendars\ScheduledInstructionalDayCalculator;
+use App\Models\AcademicSourceLink;
 use App\Models\CalendarEvent;
 use App\Models\SchoolYear;
 use App\Models\Student;
@@ -34,6 +35,7 @@ final class WorkspaceSummaryService
             ? $this->calendarCompatibility->supports($calendar, $year, $configuration->education_provider_id)
             : false;
         $events = $calendarReady ? $calendar->events : collect();
+        $calendarSource = $calendarReady ? $this->calendarSource($calendar) : null;
         $summary = $year ? $this->calculator->summarize(
             $year->start_date->format('Y-m-d'),
             $year->end_date->format('Y-m-d'),
@@ -88,10 +90,26 @@ final class WorkspaceSummaryService
                 ])->groupBy('subject')->map(fn ($courses, $subject) => ['subject' => $subject, 'courses' => $courses->values()->all()])->values()->all(),
             ],
             'calendar' => [
-                'profile' => $calendarReady ? ['id' => $calendar->id, 'name' => $calendar->name] : null,
+                'profile' => $calendarReady ? [
+                    'id' => $calendar->id,
+                    'name' => $calendar->name,
+                    'events' => $events->where('status', 'active')->map(fn (CalendarEvent $event) => [
+                        'id' => $event->id,
+                        'name' => $event->name,
+                        'event_date' => $event->event_date->format('Y-m-d'),
+                        'end_date' => $event->end_date?->format('Y-m-d'),
+                        'event_type' => $event->event_type,
+                        'instructional_effect' => $event->instructional_effect,
+                        'description' => $event->notes,
+                        'source_reference' => $event->source_reference,
+                    ])->values()->all(),
+                ] : null,
                 'state' => $calendarReady ? 'ready' : ($calendar ? 'needs_review' : 'missing'),
                 'summary' => $summary,
                 'target' => $year?->instructional_day_target,
+                'opening_month' => $year ? $this->openingMonth($tenant->timezone, $year) : null,
+                'current_date' => CarbonImmutable::now($tenant->timezone)->format('Y-m-d'),
+                'source' => $calendarSource,
             ],
         ];
     }
@@ -200,5 +218,50 @@ final class WorkspaceSummaryService
                 'end_date' => $event->end_date?->format('Y-m-d'),
                 'instructional_effect' => $event->instructional_effect,
             ])->values()->all();
+    }
+
+    private function openingMonth(string $timezone, SchoolYear $year): string
+    {
+        $today = CarbonImmutable::now($timezone)->format('Y-m-d');
+        $start = $year->start_date->format('Y-m-d');
+        $end = $year->end_date->format('Y-m-d');
+
+        return match (true) {
+            $today < $start => $year->start_date->format('Y-m'),
+            $today > $end => $year->end_date->format('Y-m'),
+            default => CarbonImmutable::now($timezone)->format('Y-m'),
+        };
+    }
+
+    /** @return array<string, mixed>|null */
+    private function calendarSource(mixed $calendar): ?array
+    {
+        $linked = AcademicSourceLink::query()
+            ->with(['source.currentFile'])
+            ->where('link_type', 'calendar_profile')
+            ->where('link_id', $calendar->id)
+            ->first()?->source;
+
+        if ($linked) {
+            return [
+                'name' => $linked->title,
+                'type' => $linked->source_kind,
+                'reference' => $linked->currentFile?->original_filename ?? $linked->source_url,
+                'version' => $linked->version_label,
+                'review_status' => $linked->review_status,
+            ];
+        }
+
+        if (filled($calendar->source_url) || filled($calendar->source_version) || $calendar->source_type !== 'manual') {
+            return [
+                'name' => $calendar->name,
+                'type' => $calendar->source_type,
+                'reference' => $calendar->source_url,
+                'version' => $calendar->source_version,
+                'review_status' => null,
+            ];
+        }
+
+        return null;
     }
 }

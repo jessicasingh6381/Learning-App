@@ -44,6 +44,11 @@ class Tenant extends Model
         return $this->hasMany(StudentEnrollment::class);
     }
 
+    public function learningPlanSubjectPreferences(): HasMany
+    {
+        return $this->hasMany(LearningPlanSubjectPreference::class);
+    }
+
     public function academicConfigurations(): HasMany
     {
         return $this->hasMany(AcademicYearConfiguration::class);

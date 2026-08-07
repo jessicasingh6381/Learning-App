@@ -52,7 +52,11 @@ class CurriculumPackageController extends Controller
     public function show(CurriculumPackage $package): Response
     {
         Gate::authorize('view', $package);
-        $package->load(['courseMappings.course.subject', 'courseMappings.gradeLevel']);
+        $package->load([
+            'courseMappings.course.subject', 'courseMappings.gradeLevel',
+            'courseMappings.curriculumPeriods.units.standardAlignments',
+            'courseMappings.curriculumPeriods.units.components.descendants',
+        ]);
 
         return Inertia::render('Academic/Curriculum/Show', [
             'package' => [...$package->toArray(), 'is_shared' => $package->isShared()],
