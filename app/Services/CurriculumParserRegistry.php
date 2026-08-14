@@ -114,6 +114,13 @@ final class CurriculumParserRegistry implements IteratorAggregate
         /** @var CurriculumOutlineParser $parser */
         $parser = $selected['parser'];
 
+        if ($selected['score'] < .8) {
+            return $this->result('ambiguous', $file, $signature,
+                'We recognized numbered units and part of a structured custom curriculum. Review the detected structure before saving this format.',
+                'A parser found a likely document-family match below the automatic-support confidence threshold.',
+                $matches->map(fn ($item) => collect($item)->except('parser')->all())->all());
+        }
+
         return new CurriculumParserCapability(
             'supported', $parser->key(), $parser->version(), $parser->extractionMethod(),
             $selected['score'], 'Outline extraction is supported for this document.', null,

@@ -37,4 +37,14 @@ class StudentEnrollment extends Model
     {
         return $this->hasMany(LearningPlanSubjectPreference::class);
     }
+
+    public function lessonPlans(): HasMany
+    {
+        return $this->hasMany(LessonPlan::class);
+    }
+
+    public function lessonExperienceProgress(): HasMany
+    {
+        return $this->hasMany(StudentLessonProgress::class);
+    }
 }

@@ -42,11 +42,19 @@ final readonly class CurriculumProposalData
             'normalized_code' => $this->normalizedCode, 'statement' => $this->statement,
         ];
 
+        $metadata = ['proposal_key' => $this->key, ...$this->parserMetadata];
+        if ($this->plannedStartDate || $this->plannedEndDate || $this->estimatedDays) {
+            $metadata['schedule_origin'] ??= 'source';
+        }
+        if (! empty($metadata['duration_text'])) {
+            $metadata['duration_origin'] ??= 'source';
+        }
+
         return [
             ...$editable, 'source_page' => $this->sourcePage, 'raw_text' => $this->rawText,
             'parser_note' => $this->parserNote, 'confidence' => $this->confidence,
             'manually_edited' => false, 'original_values' => $editable,
-            'parser_metadata' => ['proposal_key' => $this->key, ...$this->parserMetadata],
+            'parser_metadata' => $metadata,
         ];
     }
 }

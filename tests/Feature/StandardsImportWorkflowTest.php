@@ -4,7 +4,12 @@ namespace Tests\Feature;
 
 use App\Contracts\PdfTextExtractor;
 use App\Models\AcademicSource;
+use App\Models\Course;
 use App\Models\CurriculumImport;
+use App\Models\CurriculumPackage;
+use App\Models\CurriculumParserCapability;
+use App\Models\CurriculumPeriod;
+use App\Models\CurriculumUnit;
 use App\Models\EducationProvider;
 use App\Models\GradeLevel;
 use App\Models\Standard;
@@ -14,11 +19,15 @@ use App\Models\Tenant;
 use App\Models\TenantMembership;
 use App\Models\User;
 use App\Services\CurriculumParserCapabilityService;
+use App\Services\CurriculumParserRegistry;
+use App\Services\CurriculumIntakeService;
+use App\Services\StructuredCustomCurriculumParser;
 use App\Services\AuditService;
 use App\Services\StandardsDocumentMetadataNormalizer;
 use App\Services\StandardsImportService;
 use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -97,6 +106,126 @@ class StandardsImportWorkflowTest extends TestCase
         $this->assertDatabaseCount('standards', 26);
         $this->actingIn($owner, $tenant)->get(route('academic.sources.show', $source))->assertInertia(fn (Assert $page) => $page
             ->where('curriculumSetup.workflow_state', 'standards_imported'));
+
+        $enrollment = $tenant->enrollments()->firstOrFail();
+        $subject = $source->links->firstWhere('link_type', 'subject');
+        $workflow = collect(app(CurriculumIntakeService::class)->build($enrollment->student_id, $source->school_year_id)['subjects'])
+            ->firstWhere('id', $subject->link_id);
+        $addPacingUrl = route('workspace.curriculum-intake.subject.create', [
+            'student' => $enrollment->student_id, 'schoolYear' => $source->school_year_id,
+            'subject' => $subject->link_id, 'intent' => 'pacing',
+        ]);
+        $standardsUrl = route('academic.standards-imports.show', ['curriculumImport' => $import->id, 'student_id' => $enrollment->student_id]);
+        $this->assertSame('standards_imported_pacing_needed', $workflow['workflow_state']);
+        $this->assertSame('Add Social Studies pacing guide', $workflow['primary_action_label']);
+        $this->assertSame($addPacingUrl, $workflow['primary_action_url']);
+        $this->assertSame('View imported standards', $workflow['secondary_action_label']);
+        $this->assertSame($standardsUrl, $workflow['secondary_action_url']);
+        $this->assertSame(26, $workflow['standards_count']);
+        $this->actingIn($owner, $tenant)->get(route('workspace.learning-plan', ['student_id' => $enrollment->student_id]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('learningPlan.curriculum_ready_count', 0)
+                ->where('learningPlan.curriculum_total_count', 1)
+                ->where('learningPlan.curriculum_status_label', '0 of 1 subjects ready'));
+        $this->actingIn($owner, $tenant)->get($addPacingUrl)->assertInertia(fn (Assert $page) => $page
+            ->where('entryMode', 'add')->where('sourceIntent', 'pacing')
+            ->where('selectedContext.grade_name', 'Grade 5')->where('selectedSubject.name', 'Social Studies')
+            ->where('contextProvider.name', 'CFISD'));
+        $this->actingIn($owner, $tenant)->get($standardsUrl)->assertInertia(fn (Assert $page) => $page
+            ->where('nextStep.label', 'Add Social Studies pacing guide')->where('nextStep.url', $addPacingUrl));
+
+        $this->actingIn($owner, $tenant)->post(route('workspace.curriculum-intake.subject.store', [
+            'student' => $enrollment->student_id, 'schoolYear' => $source->school_year_id,
+            'subject' => $subject->link_id, 'intent' => 'pacing',
+        ]), [
+            'title' => 'Grade 5 Social Studies pacing', 'source_kind' => 'upload',
+            'source_file' => UploadedFile::fake()->createWithContent('social-studies-pacing.pdf', "%PDF-1.4\npacing\n%%EOF"),
+            'version_label' => '2026-2027',
+        ])->assertSessionHasNoErrors();
+        $pacing = AcademicSource::query()->where('title', 'Grade 5 Social Studies pacing')->firstOrFail();
+        $this->assertSame('pacing', $pacing->source_category);
+        $workflow = collect(app(CurriculumIntakeService::class)->build($enrollment->student_id, $source->school_year_id)['subjects'])->firstWhere('id', $subject->link_id);
+        $this->assertSame('pacing_source_awaiting_review', $workflow['workflow_state']);
+        $this->assertSame('Review pacing source', $workflow['primary_action_label']);
+        $this->assertSame('View imported standards', $workflow['secondary_action_label']);
+
+        $pacing->update(['review_status' => 'reviewed']);
+        CurriculumParserCapability::create([
+            'academic_source_id' => $pacing->id, 'academic_source_file_id' => $pacing->currentFile->id,
+            'file_checksum' => $pacing->currentFile->checksum_sha256,
+            'registry_signature' => app(CurriculumParserRegistry::class)->signature(),
+            'state' => 'supported', 'parser_key' => StructuredCustomCurriculumParser::KEY,
+            'parser_version' => StructuredCustomCurriculumParser::VERSION,
+            'extraction_method' => 'pdf_text_structured', 'recognition_score' => 1,
+            'user_message' => 'Supported.', 'candidate_parsers' => [], 'assessed_at' => now(),
+        ]);
+        $workflow = collect(app(CurriculumIntakeService::class)->build($enrollment->student_id, $source->school_year_id)['subjects'])->firstWhere('id', $subject->link_id);
+        $this->assertSame('pacing_source_reviewed', $workflow['workflow_state']);
+        $this->assertSame('Create curriculum outline', $workflow['primary_action_label']);
+        $this->assertSame('View imported standards', $workflow['secondary_action_label']);
+
+        $pacing->update(['archived_at' => now()]);
+        $workflow = collect(app(CurriculumIntakeService::class)->build($enrollment->student_id, $source->school_year_id)['subjects'])->firstWhere('id', $subject->link_id);
+        $this->assertSame('standards_imported_pacing_needed', $workflow['workflow_state']);
+        $pacing->update(['archived_at' => null]);
+
+        $package = CurriculumPackage::create([
+            'education_provider_id' => $source->education_provider_id,
+            'standards_framework_id' => $import->standards_framework_id,
+            'name' => 'Grade 5 Social Studies Outline', 'version_label' => '2026-2027', 'status' => 'draft',
+        ]);
+        $course = Course::create([
+            'subject_id' => $subject->link_id, 'standards_framework_id' => $import->standards_framework_id,
+            'education_provider_id' => $source->education_provider_id, 'name' => 'Grade 5 Social Studies',
+            'code' => 'SS-5-WORKFLOW', 'minimum_grade_level_id' => $source->grade_level_id,
+            'maximum_grade_level_id' => $source->grade_level_id, 'status' => 'draft',
+        ]);
+        $mapping = $package->courseMappings()->create([
+            'course_id' => $course->id, 'grade_level_id' => $source->grade_level_id,
+            'sort_order' => 1, 'required' => true,
+        ]);
+        $outlineImport = CurriculumImport::create([
+            'academic_source_id' => $pacing->id, 'academic_source_file_id' => $pacing->currentFile->id,
+            'curriculum_package_id' => $package->id, 'curriculum_package_course_id' => $mapping->id,
+            'subject_id' => $subject->link_id, 'grade_level_id' => $source->grade_level_id,
+            'school_year_id' => $source->school_year_id, 'standards_framework_id' => $import->standards_framework_id,
+            'import_type' => 'curriculum', 'created_by_user_id' => $owner->id, 'status' => 'review',
+            'parser_key' => StructuredCustomCurriculumParser::KEY,
+            'parser_version' => StructuredCustomCurriculumParser::VERSION,
+        ]);
+        $workflow = collect(app(CurriculumIntakeService::class)->build($enrollment->student_id, $source->school_year_id)['subjects'])->firstWhere('id', $subject->link_id);
+        $this->assertSame('outline_review', $workflow['workflow_state']);
+        $this->assertSame('Review curriculum outline', $workflow['primary_action_label']);
+        $this->assertSame('View imported standards', $workflow['secondary_action_label']);
+
+        $periodProposal = $outlineImport->proposals()->create([
+            'proposal_type' => 'period', 'included' => true, 'sequence' => 1,
+            'name' => 'Reporting Period 1', 'reporting_period' => 'Reporting Period 1',
+        ]);
+        $unitProposal = $outlineImport->proposals()->create([
+            'parent_proposal_id' => $periodProposal->id, 'proposal_type' => 'unit', 'included' => true,
+            'sequence' => 1, 'name' => 'Early America', 'unit_type' => 'instructional',
+        ]);
+        $period = CurriculumPeriod::create([
+            'curriculum_package_course_id' => $mapping->id, 'name' => 'Reporting Period 1',
+            'sequence' => 1, 'period_type' => 'reporting_period', 'status' => 'draft',
+            'academic_source_id' => $pacing->id, 'academic_source_file_id' => $pacing->currentFile->id,
+            'curriculum_import_id' => $outlineImport->id, 'curriculum_import_proposal_id' => $periodProposal->id,
+            'parser_key' => StructuredCustomCurriculumParser::KEY, 'parser_version' => StructuredCustomCurriculumParser::VERSION,
+        ]);
+        CurriculumUnit::create([
+            'curriculum_period_id' => $period->id, 'curriculum_package_course_id' => $mapping->id,
+            'name' => 'Early America', 'sequence' => 1, 'unit_type' => 'instructional', 'included' => true,
+            'academic_source_id' => $pacing->id, 'academic_source_file_id' => $pacing->currentFile->id,
+            'curriculum_import_id' => $outlineImport->id, 'curriculum_import_proposal_id' => $unitProposal->id,
+            'parser_key' => StructuredCustomCurriculumParser::KEY, 'parser_version' => StructuredCustomCurriculumParser::VERSION,
+        ]);
+        $outlineImport->update(['status' => 'approved', 'approved_by_user_id' => $owner->id, 'approved_at' => now()]);
+        $workflow = collect(app(CurriculumIntakeService::class)->build($enrollment->student_id, $source->school_year_id)['subjects'])->firstWhere('id', $subject->link_id);
+        $this->assertSame('outline_approved', $workflow['workflow_state']);
+        $this->assertSame('View curriculum outline', $workflow['primary_action_label']);
+        $this->assertSame('View imported standards', $workflow['secondary_action_label']);
+        $this->actingIn($owner, $tenant)->get($standardsUrl)->assertInertia(fn (Assert $page) => $page->where('nextStep', null));
     }
 
     public function test_standards_routes_are_tenant_safe_and_students_are_denied(): void
@@ -186,6 +315,8 @@ class StandardsImportWorkflowTest extends TestCase
         Storage::disk('local')->put("academic-sources/{$source->id}/ss.pdf", '%PDF fixture');
         $source->files()->create(['uploaded_by_user_id' => $owner->id, 'version_number' => 1, 'current_key' => 'current', 'is_current' => true, 'disk' => 'local', 'stored_path' => "academic-sources/{$source->id}/ss.pdf", 'stored_filename' => 'ss.pdf', 'original_filename' => 'Social Studies.pdf', 'mime_type' => 'application/pdf', 'extension' => 'pdf', 'file_size' => 12, 'checksum_sha256' => str_repeat('e', 64), 'uploaded_at' => now()]);
         $source->links()->create(['link_type' => 'subject', 'link_id' => $subject->id]); $source->links()->create(['link_type' => 'standards_framework', 'link_id' => $framework->id]);
+        $student = $tenant->students()->create(['first_name' => 'Kai', 'last_name' => 'Singh', 'status' => 'active']);
+        $tenant->enrollments()->create(['student_id' => $student->id, 'school_year_id' => $year->id, 'grade_level_id' => $grade->id, 'enrollment_date' => '2026-08-12', 'status' => 'active']);
         return [$owner, $tenant, $source->load(['currentFile', 'gradeLevel', 'links'])];
     }
 

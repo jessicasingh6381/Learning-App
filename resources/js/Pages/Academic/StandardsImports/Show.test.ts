@@ -19,7 +19,7 @@ const props = (status = 'review'): any => ({
     strands: [row({ children: [row({ id: 2, parent_proposal_id: 1, proposal_type: 'standard', name: '5.1', standard_code: '5.1', normalized_code: '5.1', statement: 'The student understands colonization.', raw_text: '(1) History...', children: [row({ id: 3, parent_proposal_id: 2, proposal_type: 'student_expectation', name: '5.1A', standard_code: '5.1A', normalized_code: '5.1A', statement: 'explain when, where, and why...', raw_text: '(A) explain...', children: [] })] })] })],
     canManage: status === 'review',
 });
-const mountPage = (status = 'review') => mount(StandardsImportShow, { props: props(status), global: { stubs: { AuthenticatedLayout: { template: '<main><slot /></main>' } } } });
+const mountPage = (status = 'review', overrides: Record<string, unknown> = {}) => mount(StandardsImportShow, { props: { ...props(status), ...overrides }, global: { stubs: { AuthenticatedLayout: { template: '<main><slot /></main>' } } } });
 
 describe('standards import review', () => {
     beforeEach(() => { state.forms = []; state.put.mockReset(); state.post.mockReset(); vi.restoreAllMocks(); });
@@ -40,8 +40,9 @@ describe('standards import review', () => {
     });
 
     it('renders approved standards read-only and explains that pacing remains separate', () => {
-        const wrapper = mountPage('approved');
+        const wrapper = mountPage('approved', { nextStep: { label: 'Add Social Studies pacing guide', url: '/learning-plan/social-studies/add?intent=pacing' } });
         expect(wrapper.text()).toContain('Standards imported.'); expect(wrapper.text()).toContain('Pacing guide still needed.');
+        expect(wrapper.findAll('a').find((link) => link.text() === 'Add Social Studies pacing guide')?.attributes('href')).toBe('/learning-plan/social-studies/add?intent=pacing');
         expect(wrapper.text()).toContain('Adopted 2022'); expect(wrapper.text()).toContain('August 2024 Update'); expect(wrapper.text()).toContain('2024-2025 school year');
         expect(wrapper.text()).toContain('shall be implemented by school districts');
         expect(wrapper.findAll('input').every((input) => input.attributes('disabled') !== undefined)).toBe(true);

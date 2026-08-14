@@ -56,6 +56,8 @@ class CurriculumPackageController extends Controller
             'courseMappings.course.subject', 'courseMappings.gradeLevel',
             'courseMappings.curriculumPeriods.units.standardAlignments',
             'courseMappings.curriculumPeriods.units.components.descendants',
+            'courseMappings.periodlessCurriculumUnits.standardAlignments',
+            'courseMappings.periodlessCurriculumUnits.components.descendants',
         ]);
 
         return Inertia::render('Academic/Curriculum/Show', [

@@ -58,6 +58,21 @@ class ScheduledInstructionalDayCalculatorTest extends TestCase
         }
     }
 
+    public function test_instructional_dates_skip_weekends_and_closures_but_include_overrides(): void
+    {
+        $dates = $this->calculator()->instructionalDates(
+            '2026-08-12',
+            '2026-08-17',
+            [1, 2, 3, 4, 5],
+            collect([
+                $this->event('2026-08-13', null, 'non_instructional'),
+                $this->event('2026-08-15', null, 'instructional'),
+            ]),
+        );
+
+        $this->assertSame(['2026-08-12', '2026-08-14', '2026-08-15', '2026-08-17'], $dates);
+    }
+
     private function calculator(): ScheduledInstructionalDayCalculator
     {
         return new ScheduledInstructionalDayCalculator(new BaseInstructionalDayCalculator);

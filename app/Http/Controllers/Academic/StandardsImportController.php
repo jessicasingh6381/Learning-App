@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AcademicSource;
 use App\Models\CurriculumImport;
 use App\Models\CurriculumImportProposal;
+use App\Models\StudentEnrollment;
+use App\Services\CurriculumIntakeService;
 use App\Services\StandardsDocumentMetadataNormalizer;
 use App\Services\StandardsImportService;
 use Illuminate\Http\RedirectResponse;
@@ -25,7 +27,12 @@ class StandardsImportController extends Controller
             ->with('success', $import->status === 'review' ? 'Grade-specific standards extracted. Review every item before approval.' : 'Existing standards import opened.');
     }
 
-    public function show(CurriculumImport $curriculumImport, StandardsDocumentMetadataNormalizer $metadataNormalizer): Response
+    public function show(
+        Request $request,
+        CurriculumImport $curriculumImport,
+        StandardsDocumentMetadataNormalizer $metadataNormalizer,
+        CurriculumIntakeService $curriculumIntake,
+    ): Response
     {
         abort_unless($curriculumImport->import_type === 'standards', 404);
         $curriculumImport->load(['source', 'sourceFile', 'subject', 'gradeLevel', 'schoolYear', 'standardsFramework', 'proposals', 'approvedBy:id,name']);
@@ -41,6 +48,25 @@ class StandardsImportController extends Controller
         $documentMetadata = $metadataNormalizer->normalize($curriculumImport->document_metadata ?? [], $curriculumImport->adopted_label);
         $documentMetadata['implementation_label'] = $documentMetadata['effective_label'];
         $documentMetadata['update_label'] = $documentMetadata['version_label'];
+        $nextStep = null;
+        if ($curriculumImport->status === 'approved' && Gate::allows('create', AcademicSource::class)) {
+            $enrollmentQuery = StudentEnrollment::query()
+                ->where('school_year_id', $curriculumImport->school_year_id)
+                ->where('grade_level_id', $curriculumImport->grade_level_id)
+                ->whereIn('status', ['planned', 'active'])
+                ->whereHas('student', fn ($query) => $query->where('status', 'active'));
+            if ($request->filled('student_id')) {
+                $enrollmentQuery->where('student_id', $request->integer('student_id'));
+            }
+            $enrollment = $enrollmentQuery->orderByRaw("case when status = 'active' then 0 else 1 end")->orderBy('id')->first();
+            if ($enrollment) {
+                $subject = collect($curriculumIntake->build($enrollment->student_id, $enrollment->school_year_id)['subjects'])
+                    ->firstWhere('id', $curriculumImport->subject_id);
+                if (($subject['workflow_state'] ?? null) === 'standards_imported_pacing_needed') {
+                    $nextStep = ['label' => $subject['primary_action_label'], 'url' => $subject['primary_action_url']];
+                }
+            }
+        }
         return Inertia::render('Academic/StandardsImports/Show', [
             'standardsImport' => [
                 ...$curriculumImport->only(['id', 'status', 'parser_key', 'parser_version', 'extraction_method', 'diagnostic', 'document_section', 'adopted_label', 'introduction_text', 'review_version']),
@@ -54,6 +80,7 @@ class StandardsImportController extends Controller
                 'school_year' => $curriculumImport->schoolYear?->name, 'framework' => $curriculumImport->standardsFramework->name],
             'strands' => $strands,
             'canManage' => $curriculumImport->status === 'review' && Gate::allows('curriculum.manage') && Gate::allows('update', $curriculumImport->source),
+            'nextStep' => $nextStep,
         ]);
     }
 

@@ -34,5 +34,11 @@ const componentSummary = (unit: any) => unit.components.map((component: any) => 
                 </div>
             </div>
         </section>
+        <section v-for="mapping in package.course_mappings.filter((item: any) => item.periodless_curriculum_units?.length)" :key="`periodless-outline-${mapping.id}`" class="card mt-4">
+            <div class="card-body"><h2 class="h5 mb-1">{{ mapping.course.name }} outline</h2><p class="small text-secondary">{{ mapping.grade_level?.name ?? 'Course grade range' }} · ordered custom curriculum</p>
+                <p class="small text-secondary">This curriculum uses an ordered unit sequence without reporting periods.</p>
+                <ol class="mb-0"><li v-for="unit in mapping.periodless_curriculum_units" :key="unit.id" class="mb-3"><strong>{{ unit.name }}</strong> <span class="badge text-bg-light border text-capitalize">{{ unit.unit_type }}</span><span v-if="unit.metadata?.duration_text" class="small text-secondary"> · {{ unit.metadata.duration_text }}</span><span v-else-if="unit.estimated_days" class="small text-secondary"> · {{ unit.estimated_days }} days</span><p v-if="unit.planned_start_date || unit.planned_end_date" class="small text-secondary mb-1">{{ unit.planned_start_date ?? 'No start date' }} – {{ unit.planned_end_date ?? 'No end date' }}<span v-if="unit.estimated_days"> · {{ unit.estimated_days }} instructional days</span></p><p v-if="unit.summary" class="small mb-1 mt-1">{{ unit.summary }}</p><div v-if="unit.standard_alignments.length" class="small text-secondary">Standards: {{ unit.standard_alignments.map((item: any) => item.standard_code).join(', ') }}</div><details v-if="unit.components?.length" class="mt-2"><summary class="small fw-semibold">{{ unit.components.length }} sections · {{ componentSummary(unit) }}</summary><ul class="mt-2 mb-0"><CurriculumUnitComponentTree v-for="component in unit.components" :key="component.id" :component="component" /></ul></details></li></ol>
+            </div>
+        </section>
     </AuthenticatedLayout>
 </template>

@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Contracts\PdfTextExtractor;
+use App\Contracts\LessonGenerator;
 use App\Models\AcademicSource;
 use App\Models\AcademicYearConfiguration;
 use App\Models\CalendarProfile;
@@ -11,9 +12,11 @@ use App\Models\CurriculumPackage;
 use App\Models\EducationProvider;
 use App\Models\StandardsFramework;
 use App\Models\Subject;
+use App\Models\LessonPlan;
 use App\Policies\AcademicResourcePolicy;
 use App\Policies\AcademicSourcePolicy;
 use App\Policies\AcademicYearConfigurationPolicy;
+use App\Policies\LessonPlanPolicy;
 use App\Services\PermissionService;
 use App\Services\CfisdGrade5MathYearAtGlanceParser;
 use App\Services\CfisdGrade5ElarParentYearAtGlanceParser;
@@ -23,6 +26,8 @@ use App\Services\CurriculumParserRegistry;
 use App\Services\DeclarativeCurriculumFormatParser;
 use App\Models\CurriculumFormatProfile;
 use App\Services\SmalotPdfTextExtractor;
+use App\Services\StructuredCustomCurriculumParser;
+use App\Services\OpenAiLessonGenerator;
 use App\Tenancy\TenantContext;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Vite;
@@ -37,6 +42,10 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->scoped(TenantContext::class);
         $this->app->bind(PdfTextExtractor::class, SmalotPdfTextExtractor::class);
+        $this->app->bind(LessonGenerator::class, fn ($app) => match (config('lesson-generation.provider')) {
+            'openai' => $app->make(OpenAiLessonGenerator::class),
+            default => throw new \LogicException('The configured lesson generator provider is not supported.'),
+        });
         $this->app->bind(CurriculumParserRegistry::class, function ($app) {
             $profiles = CurriculumFormatProfile::query()->where('status', 'active')->get()
                 ->map(fn ($profile) => $app->make(DeclarativeCurriculumFormatParser::class, ['profile' => $profile]));
@@ -45,6 +54,7 @@ class AppServiceProvider extends ServiceProvider
                 $app->make(CfisdGrade5ElarParentYearAtGlanceParser::class),
                 $app->make(CfisdGrade5ScienceYearAtGlanceParser::class),
                 $app->make(TexasTeksMultigradeSocialStudiesParser::class),
+                $app->make(StructuredCustomCurriculumParser::class),
                 ...$profiles,
             ]);
         });
@@ -64,6 +74,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(CurriculumPackage::class, AcademicResourcePolicy::class);
         Gate::policy(AcademicYearConfiguration::class, AcademicYearConfigurationPolicy::class);
         Gate::policy(AcademicSource::class, AcademicSourcePolicy::class);
+        Gate::policy(LessonPlan::class, LessonPlanPolicy::class);
         Gate::before(function ($user, string $ability) {
             if (str_contains($ability, '.')) {
                 return app(PermissionService::class)->allows($ability) ?: null;

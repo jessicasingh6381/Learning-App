@@ -40,5 +40,6 @@ const active = (name: string, section?: string) => section
         </div>
     </nav>
     <div v-if="page.props.flash?.success" class="container mt-3"><div class="alert alert-success" role="status">{{ page.props.flash.success }}</div></div>
+    <div v-if="Object.keys(page.props.errors || {}).length" class="container mt-3"><div class="alert alert-danger" role="alert"><strong>The action could not be completed.</strong><ul class="mb-0 mt-1"><li v-for="(message, field) in page.props.errors" :key="field">{{ message }}</li></ul></div></div>
     <main id="main-content" class="page-shell"><slot /></main>
 </template>

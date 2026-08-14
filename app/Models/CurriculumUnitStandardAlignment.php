@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class CurriculumUnitStandardAlignment extends Model
 {
@@ -20,4 +21,13 @@ class CurriculumUnitStandardAlignment extends Model
     public function curriculumUnit(): BelongsTo { return $this->belongsTo(CurriculumUnit::class); }
     public function standardsFramework(): BelongsTo { return $this->belongsTo(StandardsFramework::class); }
     public function standard(): BelongsTo { return $this->belongsTo(Standard::class); }
+    public function lessons(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Lesson::class,
+            'lesson_standard_alignments',
+            'curriculum_unit_standard_alignment_id',
+            'lesson_id'
+        )->withPivot('tenant_id')->withTimestamps();
+    }
 }

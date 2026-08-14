@@ -136,7 +136,7 @@ final class CurriculumIntakeService
     {
         $sources = AcademicSource::query()
             ->whereNull('archived_at')
-            ->where('source_category', 'curriculum')
+            ->whereIn('source_category', ['curriculum', 'pacing', 'scope_and_sequence'])
             ->where('school_year_id', $schoolYearId)
             ->where('grade_level_id', $gradeLevelId)
             ->whereHas('links', fn ($query) => $query->where('link_type', 'subject')->whereIn('link_id', $subjects->pluck('id')))
@@ -149,6 +149,7 @@ final class CurriculumIntakeService
                     ->with(['packageCourse.curriculumPackage', 'packageCourse.course'])
                     ->withCount([
                         'periods', 'units',
+                        'standards',
                         'units as assessment_count' => fn ($units) => $units->where('unit_type', 'assessment'),
                         'standardAlignments',
                     ]),
@@ -210,6 +211,8 @@ final class CurriculumIntakeService
             'id' => $subject->id, 'name' => $subject->name, 'code' => $subject->code,
             'status' => 'not_started', 'workflow_state' => 'not_started', 'status_label' => 'Not started',
             'primary_action_label' => null, 'primary_action_url' => null,
+            'secondary_action_label' => null, 'secondary_action_url' => null,
+            'standards_import_id' => null, 'standards_count' => 0,
             'source_id' => null, 'source_review_status' => null, 'curriculum_import_id' => null,
             'curriculum_import_status' => null, 'package_id' => null, 'package_course_id' => null,
             'period_count' => 0, 'unit_count' => 0, 'assessment_count' => 0,
@@ -218,51 +221,51 @@ final class CurriculumIntakeService
     }
 
     /**
-     * The newest non-superseded import with a matching source, subject, year,
-     * grade, package and mapping wins. Without one, the most recently updated
-     * active source determines the next source step.
+     * Standards and pacing are resolved independently. Within each track, the
+     * newest matching non-superseded import wins; otherwise the most recently
+     * updated active source determines the next source step.
      *
      * @return array<string, mixed>
      */
     private function workflow($subject, Collection $sources, int $studentId, int $schoolYearId, int $gradeLevelId): array
     {
-        $candidates = $sources->flatMap(fn (AcademicSource $source) => $source->curriculumImports
-            ->filter(fn (CurriculumImport $import) => $this->importMatches($import, $subject->id, $schoolYearId, $gradeLevelId))
+        $standardsCandidates = $sources->flatMap(fn (AcademicSource $source) => $source->curriculumImports
+            ->filter(fn (CurriculumImport $import) => $import->import_type === 'standards'
+                && $this->importContextMatches($import, $subject->id, $schoolYearId, $gradeLevelId))
             ->map(fn (CurriculumImport $import) => ['source' => $source, 'import' => $import]));
-        $selected = $candidates->sort(function (array $left, array $right): int {
-            $date = $right['import']->created_at <=> $left['import']->created_at;
+        $standardsSelected = $this->newestImport($standardsCandidates);
+        /** @var CurriculumImport|null $standardsImport */
+        $standardsImport = $standardsSelected['import'] ?? null;
+        $standardsSource = $standardsSelected['source'] ?? null;
+        $approvedStandards = $standardsImport?->status === 'approved' && (int) $standardsImport->standards_count > 0;
 
-            return $date !== 0 ? $date : ($right['import']->id <=> $left['import']->id);
-        })->first();
-        $source = $selected['source'] ?? $sources->first();
+        // Standards describe required learning, not its teaching sequence or pacing.
+        $pacingSources = $sources->reject(fn (AcademicSource $source) => $source->curriculumImports
+            ->contains(fn (CurriculumImport $import) => $import->import_type === 'standards'
+                && $this->importContextMatches($import, $subject->id, $schoolYearId, $gradeLevelId)));
+        $candidates = $pacingSources->flatMap(fn (AcademicSource $source) => $source->curriculumImports
+            ->filter(fn (CurriculumImport $import) => $import->import_type !== 'standards')
+            ->filter(fn (CurriculumImport $import) => $this->importContextMatches($import, $subject->id, $schoolYearId, $gradeLevelId))
+            ->map(fn (CurriculumImport $import) => ['source' => $source, 'import' => $import]));
+        $selected = $this->newestImport($candidates);
+        $source = $selected['source'] ?? $pacingSources->first();
         /** @var CurriculumImport|null $import */
         $import = $selected['import'] ?? null;
         $mapping = $import?->packageCourse;
         $package = $mapping?->curriculumPackage;
-        $outlineExists = $import && $import->periods_count > 0 && $import->units_count > 0;
+        $targetIsValid = $import ? $this->importTargetIsValid($import, $subject->id, $gradeLevelId) : false;
+        $outlineExists = $import && $targetIsValid && $import->units_count > 0
+            && ($import->parser_key === StructuredCustomCurriculumParser::KEY || $import->periods_count > 0);
         $capability = $source ? $this->capabilities->cached($source) : null;
         $supportedParser = $capability?->state === 'supported' && $capability->parserKey && $capability->parserVersion
             ? $this->capabilities->parser($capability) : null;
         $isStandardsDocument = $supportedParser instanceof StandardsDocumentParser;
         $formatProfile = $source?->currentFile ? CurriculumFormatProfile::query()->where('example_academic_source_file_id', $source->currentFile->id)->first() : null;
 
+        $standardsUrl = $approvedStandards ? route('academic.standards-imports.show', [
+            'curriculumImport' => $standardsImport->id, 'student_id' => $studentId,
+        ]) : null;
         [$state, $label, $action, $url] = match (true) {
-            $import?->import_type === 'standards' && $import?->status === 'approved' => [
-                'standards_imported', 'Standards imported · Pacing guide still needed', 'View imported standards',
-                route('academic.standards-imports.show', $import->id),
-            ],
-            $import?->import_type === 'standards' && $import?->status === 'review' => [
-                'standards_review', ($source?->gradeLevel?->name ?? 'Selected grade').' standards ready for review', 'Review standards',
-                route('academic.standards-imports.show', $import->id),
-            ],
-            $import?->import_type === 'standards' && in_array($import?->status, ['pending', 'processing'], true) => [
-                'standards_processing', 'Standards import processing', 'View standards import',
-                route('academic.standards-imports.show', $import->id),
-            ],
-            $import?->import_type === 'standards' => [
-                'standards_needs_attention', 'Standards import needs attention', 'Review standards import',
-                route('academic.standards-imports.show', $import->id),
-            ],
             $import?->status === 'approved' && $outlineExists => [
                 'outline_approved', 'Curriculum outline approved', 'View curriculum outline',
                 route('academic.curriculum.show', $package->id),
@@ -285,7 +288,8 @@ final class CurriculumIntakeService
                 route('academic.sources.show', $source->id),
             ],
             $source?->review_status === 'reviewed' && $capability?->state === 'supported' => [
-                'source_reviewed', 'Source reviewed', 'Create curriculum outline',
+                $approvedStandards ? 'pacing_source_reviewed' : 'source_reviewed',
+                $approvedStandards ? 'Pacing source reviewed' : 'Source reviewed', 'Create curriculum outline',
                 route('academic.sources.show', $source->id),
             ],
             $source?->review_status === 'reviewed' && $capability?->state === 'unsupported' && $formatProfile?->status === 'draft' => [
@@ -305,8 +309,29 @@ final class CurriculumIntakeService
                 route('academic.sources.show', $source->id),
             ],
             $source !== null => [
-                'source_awaiting_review', 'Source awaiting review', 'Review source',
+                $approvedStandards ? 'pacing_source_awaiting_review' : 'source_awaiting_review',
+                $approvedStandards ? 'Pacing source awaiting review' : 'Source awaiting review',
+                $approvedStandards ? 'Review pacing source' : 'Review source',
                 route('academic.sources.show', $source->id),
+            ],
+            $approvedStandards => [
+                'standards_imported_pacing_needed', 'Standards imported · Pacing guide still needed',
+                'Add '.$subject->name.' pacing guide',
+                route('workspace.curriculum-intake.subject.create', [
+                    'student' => $studentId, 'schoolYear' => $schoolYearId, 'subject' => $subject->id, 'intent' => 'pacing',
+                ]),
+            ],
+            $standardsImport?->status === 'review' => [
+                'standards_review', ($standardsSource?->gradeLevel?->name ?? 'Selected grade').' standards ready for review', 'Review standards',
+                route('academic.standards-imports.show', $standardsImport->id),
+            ],
+            in_array($standardsImport?->status, ['pending', 'processing'], true) => [
+                'standards_processing', 'Standards import processing', 'View standards import',
+                route('academic.standards-imports.show', $standardsImport->id),
+            ],
+            $standardsImport !== null => [
+                'standards_needs_attention', 'Standards import needs attention', 'Review standards import',
+                route('academic.standards-imports.show', $standardsImport->id),
             ],
             default => [
                 'not_started', 'Not started', 'Add curriculum source',
@@ -319,6 +344,10 @@ final class CurriculumIntakeService
         return [
             'workflow_state' => $state, 'status_label' => $label,
             'primary_action_label' => $action, 'primary_action_url' => $url,
+            'secondary_action_label' => $approvedStandards ? 'View imported standards' : null,
+            'secondary_action_url' => $standardsUrl,
+            'standards_import_id' => $standardsImport?->id,
+            'standards_count' => (int) ($standardsImport?->standards_count ?? 0),
             'source_id' => $source?->id, 'source_review_status' => $source?->review_status,
             'curriculum_import_id' => $import?->id, 'curriculum_import_status' => $import?->status,
             'package_id' => $package?->id, 'package_course_id' => $mapping?->id,
@@ -329,7 +358,24 @@ final class CurriculumIntakeService
         ];
     }
 
-    private function importMatches(CurriculumImport $import, int $subjectId, int $schoolYearId, int $gradeLevelId): bool
+    /** @param Collection<int, array{source: AcademicSource, import: CurriculumImport}> $candidates */
+    private function newestImport(Collection $candidates): ?array
+    {
+        return $candidates->sort(function (array $left, array $right): int {
+            $date = $right['import']->created_at <=> $left['import']->created_at;
+
+            return $date !== 0 ? $date : ($right['import']->id <=> $left['import']->id);
+        })->first();
+    }
+
+    private function importContextMatches(CurriculumImport $import, int $subjectId, int $schoolYearId, int $gradeLevelId): bool
+    {
+        return $import->subject_id === $subjectId
+            && $import->school_year_id === $schoolYearId
+            && $import->grade_level_id === $gradeLevelId;
+    }
+
+    private function importTargetIsValid(CurriculumImport $import, int $subjectId, int $gradeLevelId): bool
     {
         $mapping = $import->packageCourse;
         $package = $mapping?->curriculumPackage;
@@ -338,8 +384,6 @@ final class CurriculumIntakeService
             && $package->tenant_id === $import->tenant_id
             && $import->curriculum_package_id === $package->id
             && $import->subject_id === $subjectId
-            && $import->school_year_id === $schoolYearId
-            && $import->grade_level_id === $gradeLevelId
             && $mapping->course?->subject_id === $subjectId
             && ($mapping->grade_level_id === null || $mapping->grade_level_id === $gradeLevelId);
     }

@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Contracts\PdfTextExtractor;
 use App\Models\AcademicSource;
+use App\Models\AcademicYearConfiguration;
+use App\Models\CalendarProfile;
 use App\Models\AuditLog;
 use App\Models\Course;
 use App\Models\CurriculumImport;
@@ -24,6 +26,7 @@ use App\Models\TenantMembership;
 use App\Models\User;
 use App\Services\AuditService;
 use App\Services\CurriculumImportService;
+use App\Services\CurriculumImportSchedulingService;
 use App\Tenancy\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -506,6 +509,121 @@ class CurriculumImportWorkflowTest extends TestCase
         $this->actingIn($owner, $tenant)->put(route('academic.curriculum-imports.proposals.bulk-update', $import), ['proposals' => $this->reviewPayload($import)])->assertSessionHasErrors('review');
     }
 
+    public function test_structured_custom_curriculum_reviews_and_materializes_without_invented_periods_or_dates(): void
+    {
+        [$owner, $tenant] = $this->tenantUser();
+        [$source, $mapping] = $this->curriculumContext($owner, $tenant, 'TECH');
+        $this->extractor->pages = require base_path('tests/Fixtures/structured-custom-technology.php');
+
+        $this->actingIn($owner, $tenant)->post(route('academic.sources.curriculum-imports.store', $source), [
+            'curriculum_package_course_id' => $mapping->id,
+        ])->assertRedirect();
+        $import = CurriculumImport::query()->firstOrFail();
+        $this->assertSame('custom-homeschool-curriculum', $import->parser_key);
+        $this->assertSame('custom-homeschool-curriculum', $import->document_metadata['document_family']);
+        $this->assertSame(8, $import->proposals()->where('proposal_type', 'unit')->count());
+        $this->assertSame(0, $import->proposals()->where('proposal_type', 'period')->count());
+        $this->assertSame(0, $import->proposals()->where('proposal_type', 'assessment')->count());
+        $this->assertNull($import->proposals()->where('proposal_type', 'unit')->firstOrFail()->parent_proposal_id);
+        $this->actingIn($owner, $tenant)->get(route('academic.curriculum-imports.show', $import))->assertInertia(fn (Assert $page) => $page
+            ->has('periods', 1)
+            ->where('periods.0.proposal_type', 'course')
+            ->has('periods.0.children', 8));
+
+        $this->actingIn($owner, $tenant)->put(route('academic.curriculum-imports.proposals.bulk-update', $import), [
+            'proposals' => $this->reviewPayload($import),
+        ])->assertSessionHasNoErrors();
+        $this->actingIn($owner, $tenant)->post(route('academic.curriculum-imports.approve', $import), [
+            'review_version' => $import->fresh()->review_version,
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseCount('curriculum_periods', 0);
+        $this->assertSame(8, CurriculumUnit::query()->where('curriculum_package_course_id', $mapping->id)->count());
+        $first = CurriculumUnit::query()->where('curriculum_package_course_id', $mapping->id)->orderBy('sequence')->firstOrFail();
+        $this->assertNull($first->curriculum_period_id);
+        $this->assertNull($first->planned_start_date);
+        $this->assertNull($first->planned_end_date);
+        $this->assertNull($first->estimated_days);
+        $this->assertSame('4 weeks', $first->metadata['duration_text']);
+        $this->assertSame('Big idea 1.', $first->summary);
+        $this->assertDatabaseHas('curriculum_unit_components', ['curriculum_unit_id' => $first->id, 'component_type' => 'project', 'name' => 'Project 1']);
+        $this->assertDatabaseHas('curriculum_unit_components', ['curriculum_unit_id' => $first->id, 'component_type' => 'project_milestone', 'name' => 'Build 1']);
+        $this->assertDatabaseHas('curriculum_unit_components', ['curriculum_unit_id' => $first->id, 'component_type' => 'assessment_support', 'name' => 'Evidence of Learning']);
+    }
+
+    public function test_custom_duration_is_scheduled_by_the_selected_active_calendar_and_source_dates_are_protected(): void
+    {
+        $scheduler = app(CurriculumImportSchedulingService::class);
+        $this->assertSame(20, $scheduler->instructionalDays('4 weeks', 5));
+        $this->assertSame(6, $scheduler->instructionalDays('6 sessions', 5));
+        $this->assertSame(12, $scheduler->instructionalDays('12 instructional days', 5));
+        $this->assertNull($scheduler->instructionalDays('2-3 weeks', 5));
+
+        [$owner, $tenant] = $this->tenantUser();
+        [$source, $mapping] = $this->curriculumContext($owner, $tenant, 'TECH');
+        $year = $source->schoolYear;
+        $year->update([
+            'start_date' => '2026-08-12', 'end_date' => '2027-05-27',
+            'instructional_week_type' => 'five_day', 'instructional_weekdays' => [1, 2, 3, 4, 5],
+        ]);
+        $profile = CalendarProfile::create([
+            'education_provider_id' => $source->education_provider_id,
+            'name' => 'Approved school calendar', 'academic_year_label' => '2026-2027',
+            'start_date' => '2026-08-12', 'end_date' => '2027-05-27',
+            'timezone' => 'America/Chicago', 'status' => 'active', 'source_type' => 'provider',
+        ]);
+        $profile->events()->create([
+            'event_date' => '2026-09-07', 'event_type' => 'holiday', 'name' => 'Labor Day',
+            'instructional_effect' => 'non_instructional', 'status' => 'active',
+        ]);
+        $profile->events()->create([
+            'event_date' => '2026-10-09', 'event_type' => 'teacher_workday', 'name' => 'Teacher workday',
+            'instructional_effect' => 'non_instructional', 'status' => 'active',
+        ]);
+        AcademicYearConfiguration::create([
+            'school_year_id' => $year->id, 'education_provider_id' => $source->education_provider_id,
+            'calendar_profile_id' => $profile->id,
+            'standards_framework_id' => $mapping->curriculumPackage->standards_framework_id,
+            'curriculum_package_id' => $mapping->curriculum_package_id, 'status' => 'draft',
+        ]);
+        $source->unsetRelation('schoolYear');
+        $this->extractor->pages = require base_path('tests/Fixtures/structured-custom-technology.php');
+
+        $this->actingIn($owner, $tenant)->post(route('academic.sources.curriculum-imports.store', $source), [
+            'curriculum_package_course_id' => $mapping->id,
+        ])->assertRedirect();
+        $import = CurriculumImport::query()->firstOrFail();
+        $units = $import->proposals()->where('proposal_type', 'unit')->orderBy('sequence')->get();
+        $this->assertCount(8, $units);
+        $this->assertSame('4 weeks', $units[0]->parser_metadata['duration_text']);
+        $this->assertSame('source', $units[0]->parser_metadata['duration_origin']);
+        $this->assertSame('calendar_calculated', $units[0]->parser_metadata['schedule_origin']);
+        $this->assertSame('Approved school calendar', $units[0]->parser_metadata['schedule_calendar_name']);
+        $this->assertSame('2026-08-12', $units[0]->planned_start_date->format('Y-m-d'));
+        $this->assertSame('2026-09-09', $units[0]->planned_end_date->format('Y-m-d'));
+        $this->assertSame(20, $units[0]->estimated_days);
+        $this->assertSame('2026-09-10', $units[1]->planned_start_date->format('Y-m-d'));
+        $this->assertNotSame('2026-10-09', $units[1]->planned_end_date?->format('Y-m-d'));
+
+        $payload = $this->reviewPayload($import);
+        $payload[$units[0]->id]['planned_start_date'] = '2026-08-13';
+        $this->actingIn($owner, $tenant)->put(route('academic.curriculum-imports.proposals.bulk-update', $import), [
+            'proposals' => $payload,
+        ])->assertSessionHasNoErrors();
+        $this->assertSame('manual_override', $units[0]->fresh()->parser_metadata['schedule_origin']);
+        $this->assertSame('calendar_calculated', $units[0]->fresh()->parser_metadata['schedule_previous_origin']);
+
+        $units[0]->update([
+            'planned_start_date' => '2026-08-13', 'planned_end_date' => '2026-09-10', 'estimated_days' => 20,
+            'parser_metadata' => [...$units[0]->parser_metadata, 'schedule_origin' => 'source'],
+        ]);
+        app(CurriculumImportSchedulingService::class)->schedule($import->fresh());
+        $protected = $units[0]->fresh();
+        $this->assertSame('2026-08-13', $protected->planned_start_date->format('Y-m-d'));
+        $this->assertSame('2026-09-10', $protected->planned_end_date->format('Y-m-d'));
+        $this->assertSame('source', $protected->parser_metadata['schedule_origin']);
+    }
+
     private function start(User $user, Tenant $tenant, AcademicSource $source, CurriculumPackageCourse $mapping): CurriculumImport
     {
         $this->extractor->pages = require base_path('tests/Fixtures/cfisd-grade5-math-yag-positioned.php');
@@ -533,7 +651,7 @@ class CurriculumImportWorkflowTest extends TestCase
         $year = $tenant->schoolYears()->create(['name' => '2026-2027', 'start_date' => '2026-08-01', 'end_date' => '2027-05-31', 'timezone' => 'America/Chicago', 'status' => 'active', 'instructional_day_target' => 180]);
         $provider = EducationProvider::create(['name' => 'CFISD', 'short_name' => 'CFISD', 'provider_type' => 'public_school_district', 'country_code' => 'US', 'status' => 'active']);
         $framework = StandardsFramework::create(['education_provider_id' => $provider->id, 'name' => 'Texas Essential Knowledge and Skills', 'short_name' => 'TEKS', 'jurisdiction' => 'Texas', 'version_label' => '2026', 'status' => 'active']);
-        $subjectName = match ($subjectCode) { 'ELAR' => 'English Language Arts and Reading', 'SCI' => 'Science', default => 'Mathematics' };
+        $subjectName = match ($subjectCode) { 'ELAR' => 'English Language Arts and Reading', 'SCI' => 'Science', 'TECH' => 'Technology', default => 'Mathematics' };
         $subject = Subject::create(['name' => $subjectName, 'code' => $subjectCode, 'sort_order' => 1, 'status' => 'active']);
         $course = Course::create(['subject_id' => $subject->id, 'standards_framework_id' => $framework->id, 'education_provider_id' => $provider->id, 'name' => 'Grade 5 '.$subjectName, 'code' => $subjectCode.'-5', 'minimum_grade_level_id' => $grade->id, 'maximum_grade_level_id' => $grade->id, 'status' => 'draft']);
         $package = CurriculumPackage::create(['education_provider_id' => $provider->id, 'standards_framework_id' => $framework->id, 'name' => 'Grade 5 Curriculum', 'version_label' => '2026-2027', 'status' => 'draft']);

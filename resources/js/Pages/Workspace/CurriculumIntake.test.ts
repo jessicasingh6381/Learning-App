@@ -136,6 +136,36 @@ describe('Curriculum Intake', () => {
         expect(wrapper.text()).toContain('Advanced curriculum settings');
     });
 
+    it('renders the server-provided visible-subject curriculum readiness summary', () => {
+        const readySubjects = Array.from({ length: 6 }, (_, index) => subject({
+            id: index + 1, name: `Subject ${index + 1}`, code: `S${index + 1}`,
+            workflow_state: 'outline_approved', status_label: 'Curriculum outline approved',
+        }));
+        const learningPlan = {
+            provider: 'CFISD', calendar: 'Approved Calendar', standards: 'TEKS', curriculum: null,
+            curriculum_ready_count: 6, curriculum_total_count: 6,
+            curriculum_status_label: '6 of 6 subjects ready', curriculum_status_detail: 'All active subjects approved', courses: [],
+        };
+        const complete = mountLearning({ curriculumBySubject: readySubjects, learningPlan });
+        const summaryCards = complete.findAll('.row.g-4 .card');
+        expect(summaryCards.map((card) => card.text())).toEqual([
+            'ProviderCFISD', 'CalendarApproved Calendar', 'StandardsTEKS',
+            'Curriculum6 of 6 subjects readyAll active subjects approved',
+        ]);
+        expect(complete.text()).not.toContain('Not chosen yet');
+        expect(summaryCards.every((card) => card.classes().includes('h-100'))).toBe(true);
+        expect(summaryCards.every((card) => card.element.closest('.col-sm-6')?.classList.contains('col-lg-3'))).toBe(true);
+
+        const partial = mountLearning({
+            curriculumBySubject: readySubjects,
+            hiddenCurriculumSubjects: [subject({ id: 9, name: 'Hidden Art' })], hiddenCurriculumSubjectCount: 1,
+            learningPlan: { ...learningPlan, curriculum_ready_count: 5, curriculum_total_count: 6, curriculum_status_label: '5 of 6 subjects ready', curriculum_status_detail: '1 subject still needs curriculum' },
+        });
+        expect(partial.text()).toContain('5 of 6 subjects ready');
+        expect(partial.text()).toContain('1 subject still needs curriculum');
+        expect(partial.text()).not.toContain('5 of 7 subjects ready');
+    });
+
     it('uses server-resolved review, approval, and source-ready workflow actions', () => {
         const review = subject({ status: 'outline_review', workflow_state: 'outline_review', status_label: 'Curriculum outline ready for review', primary_action_label: 'Review curriculum outline', primary_action_url: '/academic-setup/curriculum-imports/44', curriculum_import_id: 44, period_count: 4, unit_count: 26, assessment_count: 5, source_count: 1 });
         const approved = subject({ id: 3, name: 'Science', status: 'outline_approved', workflow_state: 'outline_approved', status_label: 'Curriculum outline approved', primary_action_label: 'View curriculum outline', primary_action_url: '/academic-setup/curriculum/8', curriculum_import_id: 45, period_count: 4, unit_count: 20 });
@@ -154,6 +184,39 @@ describe('Curriculum Intake', () => {
         const overview = mountOverview({ subjects: [review] });
         expect(overview.findAll('a').find((link) => link.text() === 'Review curriculum outline')?.attributes('href')).toBe('/academic-setup/curriculum-imports/44');
         expect(overview.text()).toContain('Add another source');
+    });
+
+    it('renders an approved periodless Technology outline consistently on both subject-card pages', () => {
+        const technology = subject({
+            id: 9,
+            name: 'Technology',
+            code: 'TECH',
+            status: 'outline_approved',
+            workflow_state: 'outline_approved',
+            status_label: 'Curriculum outline approved',
+            primary_action_label: 'View curriculum outline',
+            primary_action_url: '/academic-setup/curriculum/12',
+            curriculum_import_id: 49,
+            period_count: 0,
+            unit_count: 8,
+            source_count: 1,
+        });
+
+        for (const wrapper of [
+            mountOverview({ subjects: [technology] }),
+            mountLearning({ curriculumBySubject: [technology] }),
+        ]) {
+            expect(wrapper.text()).toContain('Technology');
+            expect(wrapper.text()).toContain('Curriculum outline approved');
+            expect(wrapper.text()).toContain('8 units/blocks');
+            expect(wrapper.text()).toContain('View curriculum outline');
+            expect(wrapper.text()).not.toContain('Curriculum outline needs attention');
+            expect(wrapper.text()).not.toContain('Review import issue');
+            expect(wrapper.text()).not.toContain('0 periods');
+            expect(wrapper.text()).not.toContain('reporting period warning');
+            expect(wrapper.findAll('a').find((link) => link.text() === 'View curriculum outline')?.attributes('href')).toBe('/academic-setup/curriculum/12');
+            expect(wrapper.find('.friendly-panel, article').classes()).toContain('h-100');
+        }
     });
 
     it('shows honest support states in Curriculum Intake and Learning Plan', () => {
@@ -184,10 +247,30 @@ describe('Curriculum Intake', () => {
         expect(overview.findAll('a').find((link) => link.text() === 'Import Grade 5 Social Studies standards')?.attributes('href')).toBe('/academic-setup/sources/15');
         expect(overview.text()).not.toContain('Create curriculum outline');
 
-        const imported = subject({ ...standards, workflow_state: 'standards_imported', status_label: 'Standards imported · Pacing guide still needed', primary_action_label: 'View imported standards', primary_action_url: '/academic-setup/standards-imports/9' });
+        const imported = subject({ ...standards, workflow_state: 'standards_imported_pacing_needed', status_label: 'Standards imported · Pacing guide still needed', primary_action_label: 'Add Social Studies pacing guide', primary_action_url: '/learning-plan/curriculum-intake/students/1/school-years/18/subjects/4/add?intent=pacing', secondary_action_label: 'View imported standards', secondary_action_url: '/academic-setup/standards-imports/9?student_id=1' });
         const learning = mount(LearningPlan, { props: { schoolYear: { id: 18, name: '2026-2027' }, students: [{ id: 1, name: 'Kai Singh' }], selectedStudent: { id: 1, name: 'Kai Singh', enrollment: { grade: 'Grade 5' } }, learningPlan: { provider: 'CFISD', curriculum: null, courses: [] }, curriculumBySubject: [imported], curriculumIntakeAvailable: true }, global: { stubs: { AuthenticatedLayout: layoutStub } } });
         expect(learning.text()).toContain('Standards imported · Pacing guide still needed');
-        expect(learning.findAll('a').find((link) => link.text() === 'View imported standards')?.attributes('href')).toBe('/academic-setup/standards-imports/9');
+        expect(learning.findAll('a').find((link) => link.text() === 'Add Social Studies pacing guide')?.attributes('href')).toContain('intent=pacing');
+        expect(learning.findAll('a').find((link) => link.text() === 'View imported standards')?.attributes('href')).toBe('/academic-setup/standards-imports/9?student_id=1');
+        const overviewImported = mountOverview({ subjects: [imported] });
+        expect(overviewImported.text()).toContain('Add Social Studies pacing guide');
+        expect(overviewImported.text()).toContain('View imported standards');
+
+        const pacing = subject({ ...imported, workflow_state: 'pacing_source_awaiting_review', status_label: 'Pacing source awaiting review', primary_action_label: 'Review pacing source', primary_action_url: '/academic-setup/sources/18' });
+        const approved = subject({ ...imported, workflow_state: 'outline_approved', status_label: 'Curriculum outline approved', primary_action_label: 'View curriculum outline', primary_action_url: '/academic-setup/curriculum/12' });
+        expect(mountLearning({ curriculumBySubject: [pacing] }).text()).toContain('Review pacing source');
+        const approvedView = mountLearning({ curriculumBySubject: [approved] });
+        expect(approvedView.text()).toContain('View curriculum outline');
+        expect(approvedView.text()).toContain('View imported standards');
+    });
+
+    it('guides focused pacing intake and preserves the pacing intent on submit', async () => {
+        const social = subject({ id: 4, name: 'Social Studies', code: 'SS' });
+        const wrapper = mountAdd({ selectedSubject: social, sourceIntent: 'pacing' });
+        expect(wrapper.text()).toContain('Add Social Studies Pacing Guide');
+        expect(wrapper.text()).toContain('pacing, scope-and-sequence, or year-at-a-glance source');
+        await wrapper.get('form').trigger('submit');
+        expect(state.post.mock.calls[0][0]).toContain('intent=pacing');
     });
 
     it('uses the correct cancel destination for Learning Plan and overview entry', () => {
@@ -198,7 +281,7 @@ describe('Curriculum Intake', () => {
     it('keeps curriculum intake out of student navigation', () => {
         const studentLayout = mount(StudentPortalLayout);
         expect(studentLayout.text()).not.toContain('Curriculum Intake');
-        expect(studentLayout.text()).toContain('My Learning');
+        expect(studentLayout.text()).toContain('Today’s Missions');
     });
 
     it('hides and restores subjects with compact accessible controls on both curriculum pages', async () => {

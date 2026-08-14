@@ -16,6 +16,7 @@ const props = defineProps<{
     permissions: any;
     backUrl: string;
     returnTo?: 'overview' | 'learning-plan';
+    sourceIntent?: 'pacing' | null;
     maxUploadMegabytes: number;
 }>();
 
@@ -39,22 +40,24 @@ watch(() => form.source_kind, (kind) => {
     if (kind !== 'manual') form.manual_reference = '';
 });
 
+const isPacing = computed(() => props.sourceIntent === 'pacing');
 const submit = () => form.post(route('workspace.curriculum-intake.subject.store', {
     student: props.selectedContext.student_id,
     schoolYear: props.selectedContext.school_year_id,
     subject: props.selectedSubject.id,
     from: props.returnTo === 'overview' ? 'overview' : undefined,
+    intent: isPacing.value ? 'pacing' : undefined,
 }), { forceFormData: true });
 </script>
 
 <template>
-    <Head :title="entryMode === 'add' ? `Add ${selectedSubject?.name} Curriculum Source` : 'Curriculum Intake'" />
+    <Head :title="entryMode === 'add' ? `Add ${selectedSubject?.name} ${isPacing ? 'Pacing Guide' : 'Curriculum Source'}` : 'Curriculum Intake'" />
     <AuthenticatedLayout>
         <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
             <div>
                 <p class="text-uppercase small fw-semibold text-secondary mb-1">Learning Plan</p>
-                <h1 class="h2">{{ entryMode === 'add' ? `Add ${selectedSubject.name} Curriculum Source` : 'Curriculum Intake' }}</h1>
-                <p class="text-secondary mb-0">{{ entryMode === 'add' ? 'Add one trusted source for this curriculum context.' : 'Add one trusted curriculum source at a time, organized by grade and subject.' }}</p>
+                <h1 class="h2">{{ entryMode === 'add' ? `Add ${selectedSubject.name} ${isPacing ? 'Pacing Guide' : 'Curriculum Source'}` : 'Curriculum Intake' }}</h1>
+                <p class="text-secondary mb-0">{{ entryMode === 'add' ? (isPacing ? `Add a pacing, scope-and-sequence, or year-at-a-glance source for ${selectedSubject.name}.` : 'Add one trusted source for this curriculum context.') : 'Add one trusted curriculum source at a time, organized by grade and subject.' }}</p>
             </div>
             <Link v-if="permissions.advanced" class="btn btn-link" :href="route('academic.curriculum.index')">Advanced curriculum settings</Link>
         </div>
@@ -80,7 +83,10 @@ const submit = () => form.post(route('workspace.curriculum-intake.subject.store'
                                 <div class="d-flex justify-content-between gap-2"><h3 class="h6">{{ subject.name }}</h3><span class="badge text-bg-light border align-self-start">{{ subject.status_label }}</span></div>
                                 <p class="small text-secondary">{{ subject.source_count ? `${subject.source_count} source${subject.source_count === 1 ? '' : 's'}` : 'No curriculum source added' }}</p>
                                 <p v-if="subject.curriculum_import_id" class="small text-secondary"><span v-if="subject.period_count">{{ subject.period_count }} periods · </span>{{ subject.unit_count }} units/blocks<span v-if="subject.assessment_count"> · {{ subject.assessment_count }} assessments</span><span v-if="subject.standard_alignment_count"> · {{ subject.standard_alignment_count }} standards references</span></p>
-                                <Link v-if="subject.primary_action_url" class="btn btn-sm btn-primary align-self-start mb-2" :href="subject.primary_action_url">{{ subject.primary_action_label }}</Link>
+                                <div v-if="subject.primary_action_url || subject.secondary_action_url" class="d-flex flex-wrap gap-2 mb-2 align-items-start">
+                                    <Link v-if="subject.primary_action_url" class="btn btn-sm btn-primary" :href="subject.primary_action_url">{{ subject.primary_action_label }}</Link>
+                                    <Link v-if="subject.secondary_action_url" class="btn btn-sm btn-outline-primary" :href="subject.secondary_action_url">{{ subject.secondary_action_label }}</Link>
+                                </div>
                                 <div v-for="source in subject.sources" :key="source.id" class="border-top pt-2 mt-2">
                                     <strong class="small d-block">{{ source.title }}</strong>
                                     <span class="small text-secondary text-capitalize">{{ source.review_status.replaceAll('_', ' ') }}</span>

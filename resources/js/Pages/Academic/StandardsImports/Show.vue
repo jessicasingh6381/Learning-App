@@ -3,7 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
-const props = defineProps<{ standardsImport: any; source: any; context: any; strands: any[]; canManage: boolean }>();
+const props = defineProps<{ standardsImport: any; source: any; context: any; strands: any[]; canManage: boolean; nextStep?: { label: string; url: string } | null }>();
 const flatten = (rows: any[]): any[] => rows.flatMap((row) => [row, ...flatten(row.children ?? [])]);
 const proposals = computed(() => flatten(props.strands));
 const reviewForm = useForm({ proposals: Object.fromEntries(proposals.value.map((row) => [row.id, {
@@ -27,7 +27,7 @@ const approve = () => { if (!reviewForm.isDirty && window.confirm('Approve these
     <Head :title="`${context.grade} ${context.subject} standards review`" />
     <AuthenticatedLayout>
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4"><div><h1 class="h2 mb-1">{{ context.grade }} {{ context.subject }} standards</h1><p class="text-secondary mb-0">{{ context.framework }} · {{ standardsImport.document_section }} · {{ standardsImport.adopted_label }}</p></div><Link class="btn btn-outline-secondary" :href="route('academic.sources.show', source.id)">Back to source</Link></div>
-        <div v-if="standardsImport.status === 'approved'" class="alert alert-success"><strong>Standards imported.</strong> These records are read-only and reusable for future curriculum alignment. Pacing guide still needed.</div>
+        <div v-if="standardsImport.status === 'approved'" class="alert alert-success d-flex flex-wrap justify-content-between align-items-center gap-2"><span><strong>Standards imported.</strong> These records are read-only and reusable for future curriculum alignment.<template v-if="nextStep"> Pacing guide still needed.</template></span><Link v-if="nextStep" class="btn btn-sm btn-primary" :href="nextStep.url">{{ nextStep.label }}</Link></div>
         <div v-else class="alert alert-info">This multi-grade document was isolated using validated source context. Only {{ context.grade }} {{ context.subject }} standards are shown; no pacing, units, dates, or assessments will be created.</div>
 
         <section class="card mb-4"><div class="card-body"><h2 class="h5">Source section</h2><dl class="row mb-0"><dt class="col-sm-3">File</dt><dd class="col-sm-9">{{ source.file.name }}</dd><dt class="col-sm-3">Pages</dt><dd class="col-sm-9">{{ standardsImport.document_metadata?.source_pages?.join('–') }}</dd><dt class="col-sm-3">Implementation</dt><dd class="col-sm-9">{{ standardsImport.document_metadata?.implementation_label }}</dd><dt class="col-sm-3">Document update</dt><dd class="col-sm-9">{{ standardsImport.document_metadata?.update_label }}</dd></dl><details class="mt-3"><summary class="fw-semibold">Grade-level introduction</summary><p class="small mt-2 mb-0">{{ standardsImport.introduction_text }}</p></details></div></section>

@@ -65,6 +65,17 @@ class CurriculumImportController extends Controller
         Gate::authorize('curriculum.view');
         $proposals = $curriculumImport->proposals;
         $periods = $proposals->where('proposal_type', 'period')->sortBy('sequence');
+        $outlineGroups = $periods->isNotEmpty()
+            ? $periods->map(fn (CurriculumImportProposal $period) => [
+                ...$this->proposal($period),
+                'children' => $proposals->where('parent_proposal_id', $period->id)->sortBy('sequence')
+                    ->map(fn (CurriculumImportProposal $proposal) => $this->proposalTree($proposal, $proposals))->values(),
+            ])->values()
+            : collect([[
+                'id' => 'course-outline', 'proposal_type' => 'course', 'name' => 'Course outline',
+                'children' => $proposals->whereNull('parent_proposal_id')->whereIn('proposal_type', ['unit', 'assessment'])->sortBy('sequence')
+                    ->map(fn (CurriculumImportProposal $proposal) => $this->proposalTree($proposal, $proposals))->values(),
+            ]]);
 
         return Inertia::render('Academic/CurriculumImports/Show', [
             'curriculumImport' => [
@@ -91,11 +102,7 @@ class CurriculumImportController extends Controller
                 'package' => $curriculumImport->packageCourse->curriculumPackage->name,
                 'course' => $curriculumImport->packageCourse->course->name,
             ],
-            'periods' => $periods->map(fn (CurriculumImportProposal $period) => [
-                ...$this->proposal($period),
-                'children' => $proposals->where('parent_proposal_id', $period->id)->sortBy('sequence')
-                    ->map(fn (CurriculumImportProposal $proposal) => $this->proposalTree($proposal, $proposals))->values(),
-            ])->values(),
+            'periods' => $outlineGroups,
             'unitTypes' => CurriculumImportService::UNIT_TYPES,
             'componentTypes' => CurriculumImportService::COMPONENT_TYPES,
             'canManage' => $curriculumImport->status === 'review'
@@ -172,7 +179,7 @@ class CurriculumImportController extends Controller
             ...$proposal->only([
                 'id', 'parent_proposal_id', 'proposal_type', 'included', 'sequence', 'name', 'description', 'summary',
                 'estimated_days', 'unit_type', 'component_type', 'reporting_period', 'standard_codes', 'source_page',
-                'raw_text', 'parser_note', 'confidence', 'manually_edited',
+                'raw_text', 'parser_note', 'parser_metadata', 'confidence', 'manually_edited',
             ]),
             'planned_start_date' => $proposal->planned_start_date?->format('Y-m-d'),
             'planned_end_date' => $proposal->planned_end_date?->format('Y-m-d'),

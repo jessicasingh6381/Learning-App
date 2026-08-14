@@ -24,11 +24,13 @@ final class CurriculumImportService
     public const UNIT_TYPES = ['instructional', 'review', 'transition', 'assessment'];
     public const COMPONENT_TYPES = [
         'strand', 'module', 'genre', 'skill', 'conventions', 'foundational_skill',
-        'handwriting', 'integrated_subject', 'assessment_support', 'revising', 'concept', 'practice', 'investigation', 'resource', 'other',
+        'handwriting', 'integrated_subject', 'assessment_support', 'revising', 'concept', 'practice', 'investigation', 'resource',
+        'overview', 'objective', 'project', 'project_milestone', 'extension', 'duration', 'other',
     ];
 
     public function __construct(
         private CurriculumParserCapabilityService $capabilities,
+        private CurriculumImportSchedulingService $scheduling,
         private AuditService $audit,
     ) {}
 
@@ -93,7 +95,8 @@ final class CurriculumImportService
                 throw new \RuntimeException('The curriculum PDF has no usable text layer. OCR is not enabled.');
             }
             $result = $parser->parse($pages, $source);
-            if (collect($result->proposals)->where('proposalType', 'period')->isEmpty()) {
+            if (collect($result->proposals)->where('proposalType', 'period')->isEmpty()
+                && $parser->key() !== StructuredCustomCurriculumParser::KEY) {
                 throw new \RuntimeException('No reporting periods were recognized in this curriculum document.');
             }
 
@@ -106,10 +109,12 @@ final class CurriculumImportService
                     $proposal = $locked->proposals()->create($values);
                     $parentIds[$proposalData->key] = $proposal->id;
                 }
+                $this->scheduling->schedule($locked);
                 $locked->update([
                     'status' => 'review', 'parser_key' => $parser->key(), 'parser_version' => $parser->version(),
                     'extraction_method' => $parser->extractionMethod(), 'source_title' => $result->title,
-                    'source_revision_date' => $result->revisionDate, 'diagnostic' => $result->diagnostic,
+                    'source_revision_date' => $result->revisionDate, 'document_metadata' => $result->metadata,
+                    'diagnostic' => $result->diagnostic,
                     'completed_at' => now(),
                 ]);
                 $source->update(['processing_status' => 'completed']);
@@ -156,13 +161,14 @@ final class CurriculumImportService
             if ($submittedById->keys()->sort()->values()->all() !== $proposals->keys()->sort()->values()->all()) {
                 throw ValidationException::withMessages(['review' => 'The proposal list changed. Reload before saving the complete review.']);
             }
-            $this->validateRows($proposals, $submittedById);
+            $this->validateRows($proposals, $submittedById, $locked->parser_key === StructuredCustomCurriculumParser::KEY);
 
             foreach ($submittedById as $id => $values) {
                 $proposal = $proposals->get($id);
                 $before = $proposal->toArray();
+                $scheduleMetadata = $this->scheduling->manualScheduleMetadata($proposal, $values);
                 $proposal->fill([
-                    'parent_proposal_id' => $proposal->proposal_type === 'period' ? null : (int) $values['parent_proposal_id'],
+                    'parent_proposal_id' => $proposal->proposal_type === 'period' ? null : (($values['parent_proposal_id'] ?? null) ? (int) $values['parent_proposal_id'] : null),
                     'included' => (bool) $values['included'], 'sequence' => (int) $values['sequence'],
                     'name' => trim($values['name']),
                     'description' => $proposal->proposal_type === 'component' ? trim((string) ($values['description'] ?? '')) ?: null : null,
@@ -174,6 +180,7 @@ final class CurriculumImportService
                     'component_type' => $proposal->proposal_type === 'component' ? $values['component_type'] : null,
                     'reporting_period' => $proposal->proposal_type === 'period' ? trim($values['name']) : $proposal->reporting_period,
                     'standard_codes' => in_array($proposal->proposal_type, ['unit', 'assessment'], true) ? $this->normalizeCodes($values['standard_codes'] ?? []) : [],
+                    'parser_metadata' => $scheduleMetadata,
                 ]);
                 if ($proposal->isDirty()) {
                     $proposal->manually_edited = true;
@@ -265,7 +272,9 @@ final class CurriculumImportService
                 throw ValidationException::withMessages(['approval' => 'Curriculum outlines may be approved only into a draft package.']);
             }
             CurriculumPeriod::query()->where('curriculum_package_course_id', $mapping->id)->lockForUpdate()->get();
-            if (CurriculumPeriod::query()->where('curriculum_package_course_id', $mapping->id)->exists()) {
+            CurriculumUnit::query()->where('curriculum_package_course_id', $mapping->id)->lockForUpdate()->get();
+            if (CurriculumPeriod::query()->where('curriculum_package_course_id', $mapping->id)->exists()
+                || CurriculumUnit::query()->where('curriculum_package_course_id', $mapping->id)->exists()) {
                 throw ValidationException::withMessages(['approval' => 'This package course already has an outline. Choose an empty draft target.']);
             }
             $proposals = $locked->proposals()->lockForUpdate()->get()->keyBy('id');
@@ -279,7 +288,8 @@ final class CurriculumImportService
                 'summary' => $row->summary,
                 'standard_codes' => $row->standard_codes ?? [],
             ]]);
-            $this->validateRows($proposals, $submitted);
+            $periodsOptional = $locked->parser_key === StructuredCustomCurriculumParser::KEY;
+            $this->validateRows($proposals, $submitted, $periodsOptional);
 
             $periods = [];
             foreach ($proposals->where('proposal_type', 'period')->where('included', true)->sortBy('sequence') as $proposal) {
@@ -295,14 +305,15 @@ final class CurriculumImportService
             $units = [];
             foreach ($proposals->whereIn('proposal_type', ['unit', 'assessment'])->where('included', true)->sortBy('sequence') as $proposal) {
                 $period = $periods[$proposal->parent_proposal_id] ?? null;
-                if (! $period) {
+                if (! $period && ! $periodsOptional) {
                     throw ValidationException::withMessages(["proposals.{$proposal->id}.parent_proposal_id" => 'Select an included reporting period.']);
                 }
                 $unit = CurriculumUnit::create([
-                    'curriculum_period_id' => $period->id, 'curriculum_package_course_id' => $mapping->id,
+                    'curriculum_period_id' => $period?->id, 'curriculum_package_course_id' => $mapping->id,
                     'name' => $proposal->name, 'summary' => $proposal->summary, 'sequence' => $proposal->sequence,
                     'planned_start_date' => $proposal->planned_start_date, 'planned_end_date' => $proposal->planned_end_date,
                     'estimated_days' => $proposal->estimated_days, 'unit_type' => $proposal->unit_type,
+                    'metadata' => $proposal->parser_metadata,
                     'included' => true, ...$this->provenance($locked, $proposal),
                 ]);
                 $this->audit->record('curriculum-unit.imported', $unit, [], $unit->toArray());
@@ -444,7 +455,7 @@ final class CurriculumImportService
         return $frameworkId;
     }
 
-    private function validateRows($proposals, $submitted): void
+    private function validateRows($proposals, $submitted, bool $reportingPeriodsOptional = false): void
     {
         $errors = [];
         $periodIds = $proposals->where('proposal_type', 'period')->keys();
@@ -483,7 +494,7 @@ final class CurriculumImportService
                 }
                 $componentSequences[$parentId][$sequence] = true;
             } else {
-                if (! $periodIds->contains($parentId) || ! ($submitted[$parentId]['included'] ?? false)) {
+                if (! $reportingPeriodsOptional && (! $periodIds->contains($parentId) || ! ($submitted[$parentId]['included'] ?? false))) {
                     $errors["proposals.{$id}.parent_proposal_id"] = 'Select an included reporting period.';
                 }
                 if (! in_array($row['unit_type'] ?? null, self::UNIT_TYPES, true)) $errors["proposals.{$id}.unit_type"] = 'Select a valid unit type.';
@@ -493,8 +504,11 @@ final class CurriculumImportService
                 if ($days !== null && $days !== '' && ((int) $days < 1 || (int) $days > 366)) $errors["proposals.{$id}.estimated_days"] = 'Estimated days must be between 1 and 366.';
             }
         }
-        if (! collect($submitted)->contains(fn ($row, $id) => ($row['included'] ?? false) && $proposals->get((int) $id)?->proposal_type === 'period')) {
+        if (! $reportingPeriodsOptional && ! collect($submitted)->contains(fn ($row, $id) => ($row['included'] ?? false) && $proposals->get((int) $id)?->proposal_type === 'period')) {
             $errors['review'] = 'Include at least one reporting period.';
+        }
+        if (! collect($submitted)->contains(fn ($row, $id) => ($row['included'] ?? false) && $proposals->get((int) $id)?->proposal_type === 'unit')) {
+            $errors['review'] = 'Include at least one curriculum unit.';
         }
         if ($errors) throw ValidationException::withMessages(['review' => $errors['review'] ?? 'Resolve the highlighted curriculum proposals.', ...$errors]);
     }

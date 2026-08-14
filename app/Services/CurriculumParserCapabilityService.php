@@ -6,8 +6,10 @@ use App\Data\CurriculumCapabilityAssessment;
 use App\Data\CurriculumParserCapability as CapabilityData;
 use App\Models\AcademicSource;
 use App\Models\CurriculumParserCapability as CapabilityModel;
+use App\Models\CurriculumFormatProfile;
 use App\Models\GradeLevel;
 use App\Models\Subject;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -16,6 +18,8 @@ final class CurriculumParserCapabilityService
     public function __construct(
         private CurriculumParserRegistry $registry,
         private CurriculumSourcePdfExtractor $extractor,
+        private CurriculumDocumentStructureDetector $detector,
+        private AuditService $audit,
     ) {}
 
     public function cached(AcademicSource $source): CapabilityData
@@ -107,7 +111,12 @@ final class CurriculumParserCapabilityService
             );
         }
 
-        return new CurriculumCapabilityAssessment($this->persist($source, $result), $pages);
+        $capability = $this->persist($source, $result);
+        if ($capability->supported() && $capability->parserKey === StructuredCustomCurriculumParser::KEY) {
+            $this->supersedeDraftFormatProfile($source, $pages, $capability);
+        }
+
+        return new CurriculumCapabilityAssessment($capability, $pages);
     }
 
     private function validateSource(AcademicSource $source): void
@@ -149,6 +158,32 @@ final class CurriculumParserCapabilityService
         ]);
 
         return $this->fromModel($model);
+    }
+
+    private function supersedeDraftFormatProfile(AcademicSource $source, array $pages, CapabilityData $capability): void
+    {
+        $detected = $this->detector->detect($pages, $source);
+        DB::transaction(function () use ($source, $capability, $detected): void {
+            $profile = CurriculumFormatProfile::query()
+                ->where('example_academic_source_file_id', $source->currentFile->id)
+                ->where('status', 'draft')->lockForUpdate()->first();
+            if (! $profile) return;
+            $before = $profile->toArray();
+            $profile->update([
+                'status' => 'superseded',
+                'document_family' => StructuredCustomCurriculumParser::FAMILY,
+                'detected_structure' => $detected,
+                'mapping_rules' => [
+                    'strategy' => 'automatic_structured_parser',
+                    'confirmed_period_headings' => [],
+                    'confirmed_unit_rows' => $detected['unit_rows'] ?? [],
+                    'confirmed_assessment_rows' => [],
+                    'superseded_by_parser' => $capability->parserKey,
+                    'superseded_by_version' => $capability->parserVersion,
+                ],
+            ]);
+            $this->audit->record('curriculum-format-profile.superseded-by-parser', $profile, $before, $profile->fresh()->toArray());
+        });
     }
 
     private function fromModel(CapabilityModel $model): CapabilityData

@@ -64,25 +64,50 @@ describe('Student portal foundation', () => {
         expect(wrapper.text()).toContain('Cosmic Quest Academy');
         expect(wrapper.text()).toContain('2026-2027');
         expect(wrapper.text()).toContain('Grade 5');
-        expect(wrapper.text()).toContain('My Learning');
-        expect(wrapper.text()).toContain('Profile');
+        expect(wrapper.text()).toContain('Mission Control');
+        expect(wrapper.text()).toContain('Today’s Missions');
+        expect(wrapper.text()).toContain('Your next adventure');
+        expect(wrapper.text()).toContain('My Profile');
         expect(wrapper.text()).not.toContain('Students');
         expect(wrapper.text()).not.toContain('School years');
         expect(wrapper.text()).not.toContain('Members');
         expect(wrapper.text()).not.toContain('Switch tenant');
     });
 
-    it('renders the honest My Learning placeholder', () => {
+    it('renders an encouraging empty mission board', () => {
         const wrapper = mount(Learning, {
             props: { student, academy: 'Cosmic Quest Academy', enrollment },
             global: { mocks: { route: routeMock } },
         });
 
-        expect(wrapper.text()).toContain('My Learning');
-        expect(wrapper.text()).toContain(
-            'Your lessons and assignments will appear here once they are assigned.',
-        );
-        expect(wrapper.text()).toContain('There is nothing to complete yet.');
+        expect(wrapper.text()).toContain('Today’s Missions');
+        expect(wrapper.text()).toContain('All clear for now');
+        expect(wrapper.text()).toContain('Mission Control is preparing your next adventure');
+        expect(wrapper.text()).toContain('your mission board is all caught up');
+    });
+
+    it('shows only the next released lesson for each subject and its resume action', () => {
+        const wrapper = mount(Learning, {
+            props: {
+                student,
+                academy: 'Cosmic Quest Academy',
+                enrollment,
+                subjects: [{
+                    subject: 'Science',
+                    lesson: { id: 8, sequence: 2, title: 'Water Cycle', progress_status: 'in_progress', action_label: 'Continue', url: '/student/lessons/8/experience' },
+                }],
+            },
+            global: { mocks: { route: routeMock } },
+        });
+
+        expect(wrapper.text()).toContain('Science');
+        expect(wrapper.text()).toContain('Mission 2');
+        expect(wrapper.text()).toContain('Water Cycle');
+        expect(wrapper.text()).toContain('Continue');
+        expect(wrapper.text()).toContain('Your work is saved');
+        expect(wrapper.text()).toContain('In progress');
+        expect(wrapper.get('[role="progressbar"]').attributes('aria-valuenow')).toBe('55');
+        expect(wrapper.text()).not.toContain('All clear for now');
     });
 
     it('shows only intended student profile information', () => {

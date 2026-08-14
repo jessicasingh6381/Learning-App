@@ -27,8 +27,8 @@ const detected = {
     suggested_strategy: 'positioned_date_unit_table',
 };
 const source = { id: 4, title: '5th - Science', provider: 'CFISD', grade: 'Grade 5', school_year: '2026-2027' };
-const mountPage = (profile: any = null) => mount(CurriculumFormatShow, {
-    props: { profile, source, detected, canManage: true },
+const mountPage = (profile: any = null, overrides: Record<string, unknown> = {}) => mount(CurriculumFormatShow, {
+    props: { profile, source, detected, canManage: true, ...overrides },
     global: { stubs: { AuthenticatedLayout: { template: '<main><slot /></main>' } } },
 });
 
@@ -65,5 +65,68 @@ describe('curriculum document format setup', () => {
         await wrapper.get('button.btn-success').trigger('click');
         expect(confirm).toHaveBeenCalled();
         expect(state.post).toHaveBeenCalledWith('academic.curriculum-format-profiles.activate:7');
+    });
+
+    it('shows exactly eight clean Spanish headings without a course-level evidence row', () => {
+        const spanishUnits = [
+            'Unit 1 - Hola, Soy Yo',
+            'Unit 2 - Números, Colores y Mi Día',
+            'Unit 3 - Mi Familia y Las Personas',
+            'Unit 4 - Mi Escuela Ideal',
+            'Unit 5 - Tengo Hambre',
+            'Unit 6 - Mi Mundo',
+            'Unit 7 - Vamos de Viaje',
+            'Unit 8 - Mi Aventura en Español',
+        ];
+        const wrapper = mountPage({
+            id: 9,
+            status: 'superseded',
+            name: 'Spanish format history',
+            document_family: 'custom-homeschool-curriculum',
+            mapping_rules: { strategy: 'confirmed_heading_rows', confirmed_period_headings: [], confirmed_unit_rows: [], confirmed_assessment_rows: [] },
+        }, {
+            detected: { ...detected, title: 'COSMIC QUEST ACADEMY', headings: [], unit_rows: spanishUnits, assessment_rows: [], unit_ambiguities: [], column_labels: ['Unit'] },
+            source: { ...source, id: 7, title: '5 - Spanish' },
+        });
+        expect(wrapper.findAll('input[id^="unit-"]')).toHaveLength(8);
+        expect(wrapper.findAll('fieldset').find((field) => field.text().includes('Unit rows'))?.findAll('label').map((label) => label.text())).toEqual(spanishUnits);
+        expect(wrapper.text()).not.toContain('I can greet someone');
+        expect(wrapper.text()).not.toContain('Evidence of Learning');
+        expect(wrapper.get('details').attributes('open')).toBeUndefined();
+        expect(wrapper.findAll('.col-lg-4')).toHaveLength(3);
+        expect(wrapper.findAll('legend').map((legend) => legend.text())).toEqual(['Reporting-period headings', 'Unit rows', 'Assessment rows']);
+    });
+
+    it('shows the complete periodless Social Studies structure without prose or top-level assessments', () => {
+        const socialUnits = [
+            'Unit 1 - Foundations: Reading the United States',
+            'Unit 2 - Colonization and Early America',
+            'Unit 3 - Revolution, Independence, and the Constitution',
+            'Unit 4 - A Growing Nation: War of 1812, Industry, and Expansion',
+            'Unit 5 - Sectionalism, Civil War, Reconstruction, and the West',
+            'Unit 6 - Industrial America and Immigration',
+            'Unit 7 - The United States in Crisis and Change',
+            'Unit 8 - America in the 21st Century',
+            'Unit 9 - U.S. Geography and Economy Synthesis',
+            'Unit 10 - Government, Citizenship, Culture, and American Identity',
+            'Unit 11 - America Through Time - Social Studies Capstone',
+        ];
+        const wrapper = mountPage({
+            id: 10, status: 'superseded', name: 'Social Studies format history', document_family: 'custom-homeschool-curriculum',
+            mapping_rules: { strategy: 'confirmed_heading_rows', confirmed_period_headings: [], confirmed_unit_rows: [], confirmed_assessment_rows: [] },
+        }, {
+            source: { ...source, id: 8, title: '5th - SS1' },
+            detected: { ...detected, title: 'COSMIC QUEST ACADEMY', headings: [], unit_rows: socialUnits, assessment_rows: [], unit_ambiguities: [], column_labels: ['Unit'] },
+        });
+
+        expect(wrapper.findAll('input[id^="period-"]')).toHaveLength(0);
+        expect(wrapper.findAll('input[id^="unit-"]')).toHaveLength(11);
+        expect(wrapper.findAll('input[id^="assessment-"]')).toHaveLength(0);
+        expect(wrapper.text()).toContain('Unit 9 - U.S. Geography and Economy Synthesis');
+        expect(wrapper.text()).not.toContain('2026-2027 Pacing Guide');
+        expect(wrapper.text()).not.toContain('generation should occur after the pacing guide is approved');
+        expect(wrapper.text()).not.toContain('End-of-Unit Evidence');
+        expect(wrapper.findAll('.col-lg-4')).toHaveLength(3);
+        expect(wrapper.get('details').attributes('open')).toBeUndefined();
     });
 });

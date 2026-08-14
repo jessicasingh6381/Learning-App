@@ -49,8 +49,20 @@ class CurriculumPackageCourse extends Model
         return $this->hasMany(CurriculumPeriod::class)->orderBy('sequence');
     }
 
+    public function periodlessCurriculumUnits(): HasMany
+    {
+        return $this->hasMany(CurriculumUnit::class)
+            ->whereNull('curriculum_period_id')
+            ->orderBy('sequence');
+    }
+
     public function curriculumImports(): HasMany
     {
         return $this->hasMany(CurriculumImport::class);
+    }
+
+    public function lessonPlans(): HasMany
+    {
+        return $this->hasMany(LessonPlan::class);
     }
 }

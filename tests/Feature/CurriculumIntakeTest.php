@@ -9,6 +9,7 @@ use App\Models\CurriculumImport;
 use App\Models\CurriculumPackage;
 use App\Models\CurriculumPeriod;
 use App\Models\CurriculumUnit;
+use App\Models\CurriculumUnitComponent;
 use App\Models\CurriculumUnitStandardAlignment;
 use App\Models\EducationProvider;
 use App\Models\GradeLevel;
@@ -19,6 +20,8 @@ use App\Models\StandardsFramework;
 use App\Models\Tenant;
 use App\Models\TenantMembership;
 use App\Models\User;
+use App\Services\CurriculumIntakeService;
+use App\Services\StructuredCustomCurriculumParser;
 use App\Tenancy\TenantContext;
 use Database\Seeders\AcademicReferenceSeeder;
 use Database\Seeders\GradeLevelSeeder;
@@ -234,7 +237,8 @@ class CurriculumIntakeTest extends TestCase
         $this->assertDatabaseHas('academic_sources', ['source_kind' => 'manual', 'authority_level' => 'tenant_created', 'description' => 'Family-owned printed curriculum reference.']);
         $this->assertDatabaseCount('academic_source_files', 1);
         $this->assertFalse(Schema::hasTable('units'));
-        $this->assertFalse(Schema::hasTable('lessons'));
+        $this->assertTrue(Schema::hasTable('lesson_plans'));
+        $this->assertTrue(Schema::hasTable('lessons'));
         $this->assertFalse(Schema::hasTable('assignments'));
     }
 
@@ -452,6 +456,132 @@ class CurriculumIntakeTest extends TestCase
             ->where('subjects.1.source_count', 0));
     }
 
+    public function test_approved_periodless_custom_curriculum_is_complete_while_empty_approved_imports_remain_integrity_issues(): void
+    {
+        [$owner, $tenant] = $this->adult();
+        [$student, $year, $grade] = $this->enrollment($owner, $tenant);
+        $provider = EducationProvider::query()->where('short_name', 'CFISD')->firstOrFail();
+        $framework = StandardsFramework::query()->firstOrFail();
+        $package = CurriculumPackage::create([
+            'education_provider_id' => $provider->id, 'standards_framework_id' => $framework->id,
+            'name' => 'Approved Grade 5 Outlines', 'version_label' => '2026-2027', 'status' => 'draft',
+        ]);
+
+        foreach (['ELAR', 'MATH', 'SCI'] as $code) {
+            $this->createApprovedOutline($owner, $tenant, $student->id, $year->id, $grade->id, $provider->id, $framework->id, $package, $code, 'test-'.$code, 1, false);
+        }
+        $technologyImport = $this->createApprovedOutline(
+            $owner, $tenant, $student->id, $year->id, $grade->id, $provider->id, $framework->id,
+            $package, 'TECH', StructuredCustomCurriculumParser::KEY, 8, true,
+        );
+        $emptyImport = $this->createApprovedOutline(
+            $owner, $tenant, $student->id, $year->id, $grade->id, $provider->id, $framework->id,
+            $package, 'ART', StructuredCustomCurriculumParser::KEY, 0, true,
+        );
+
+        $subjects = collect(app(CurriculumIntakeService::class)->build($student->id, $year->id)['subjects'])->keyBy('code');
+        foreach (['ELAR', 'MATH', 'SCI'] as $code) {
+            $this->assertSame('outline_approved', $subjects[$code]['workflow_state']);
+            $this->assertSame('Curriculum outline approved', $subjects[$code]['status_label']);
+        }
+        $technology = $subjects['TECH'];
+        $this->assertSame('outline_approved', $technology['workflow_state']);
+        $this->assertSame('Curriculum outline approved', $technology['status_label']);
+        $this->assertNotSame('outline_needs_attention', $technology['workflow_state']);
+        $this->assertSame('View curriculum outline', $technology['primary_action_label']);
+        $this->assertSame(route('academic.curriculum.show', $package), $technology['primary_action_url']);
+        $this->assertSame(0, $technology['period_count']);
+        $this->assertSame(8, $technology['unit_count']);
+        $this->assertSame($technologyImport->id, $technology['curriculum_import_id']);
+        $this->assertSame('outline_needs_attention', $subjects['ART']['workflow_state']);
+        $this->assertSame('Review import issue', $subjects['ART']['primary_action_label']);
+        $this->assertSame($emptyImport->id, $subjects['ART']['curriculum_import_id']);
+
+        $overview = route('workspace.curriculum-intake', ['student_id' => $student->id, 'school_year_id' => $year->id]);
+        $this->actingIn($owner, $tenant)->get($overview)->assertInertia(fn (Assert $page) => $page
+            ->where('subjects', fn ($items) => $items->contains(fn ($item) => $item['code'] === 'TECH'
+                && $item['status_label'] === 'Curriculum outline approved'
+                && $item['primary_action_label'] === 'View curriculum outline'
+                && $item['primary_action_url'] === route('academic.curriculum.show', $package)
+                && $item['period_count'] === 0 && $item['unit_count'] === 8)));
+        $this->actingIn($owner, $tenant)->get('/learning-plan?student_id='.$student->id)->assertInertia(fn (Assert $page) => $page
+            ->where('curriculumBySubject', fn ($items) => $items->contains(fn ($item) => $item['code'] === 'TECH'
+                && $item['workflow_state'] === 'outline_approved'
+                && $item['primary_action_label'] === 'View curriculum outline')));
+        $this->actingIn($owner, $tenant)->get(route('academic.curriculum.show', $package))->assertInertia(fn (Assert $page) => $page
+            ->has('package.course_mappings', 5)
+            ->where('package.course_mappings.3.periodless_curriculum_units.0.name', 'TECH Unit 1')
+            ->where('package.course_mappings.3.periodless_curriculum_units.0.metadata.duration_text', '4 weeks')
+            ->where('package.course_mappings.3.periodless_curriculum_units.0.components.0.name', 'Anchor Project')
+            ->where('package.course_mappings.3.periodless_curriculum_units.0.components.0.descendants.0.name', 'Project Milestone'));
+    }
+
+    public function test_learning_plan_curriculum_summary_uses_visible_subject_readiness_instead_of_global_package_selection(): void
+    {
+        [$owner, $tenant] = $this->adult();
+        [$student, $year, $grade] = $this->enrollment($owner, $tenant);
+        $provider = EducationProvider::query()->where('short_name', 'CFISD')->firstOrFail();
+        $framework = StandardsFramework::query()->firstOrFail();
+        $package = CurriculumPackage::create([
+            'education_provider_id' => $provider->id, 'standards_framework_id' => $framework->id,
+            'name' => 'Subject-owned Grade 5 Outlines', 'version_label' => '2026-2027', 'status' => 'draft',
+        ]);
+        $approved = collect();
+        foreach (['ELAR', 'MATH', 'SCI', 'SS', 'TECH', 'LANG'] as $code) {
+            $approved[$code] = $this->createApprovedOutline(
+                $owner, $tenant, $student->id, $year->id, $grade->id, $provider->id, $framework->id,
+                $package, $code, StructuredCustomCurriculumParser::KEY, 1, true,
+            );
+        }
+        $enrollment = StudentEnrollment::query()->where('student_id', $student->id)->where('school_year_id', $year->id)->firstOrFail();
+        $visibleCodes = ['ELAR', 'MATH', 'SCI', 'SS', 'TECH', 'LANG'];
+        Subject::query()->whereNotIn('code', $visibleCodes)->get()->each(fn ($subject) => LearningPlanSubjectPreference::create([
+            'student_enrollment_id' => $enrollment->id, 'subject_id' => $subject->id, 'is_hidden' => true,
+        ]));
+        $url = route('workspace.learning-plan', ['student_id' => $student->id]);
+
+        $this->assertNull($year->academicConfiguration);
+        $this->actingIn($owner, $tenant)->get($url)->assertInertia(fn (Assert $page) => $page
+            ->where('selectedStudent.id', $student->id)
+            ->where('learningPlan.curriculum', null)
+            ->where('learningPlan.curriculum_ready_count', 6)
+            ->where('learningPlan.curriculum_total_count', 6)
+            ->where('learningPlan.curriculum_status_label', '6 of 6 subjects ready')
+            ->where('learningPlan.curriculum_status_detail', 'All active subjects approved')
+            ->has('curriculumBySubject', 6)->has('hiddenCurriculumSubjects', 6));
+
+        $approved['SS']->update(['status' => 'review', 'approved_by_user_id' => null, 'approved_at' => null]);
+        $year->academicConfiguration()->create([
+            'education_provider_id' => $provider->id, 'standards_framework_id' => $framework->id,
+            'curriculum_package_id' => $package->id, 'status' => 'active',
+        ]);
+        $this->actingIn($owner, $tenant)->get($url)->assertInertia(fn (Assert $page) => $page
+            ->where('learningPlan.curriculum', 'Subject-owned Grade 5 Outlines')
+            ->where('learningPlan.curriculum_ready_count', 5)
+            ->where('learningPlan.curriculum_total_count', 6)
+            ->where('learningPlan.curriculum_status_label', '5 of 6 subjects ready')
+            ->where('learningPlan.curriculum_status_detail', '1 subject still needs curriculum'));
+
+        $socialStudies = Subject::query()->where('code', 'SS')->firstOrFail();
+        $this->actingIn($owner, $tenant)->patch(route('workspace.learning-plan.subjects.hide', [$enrollment, $socialStudies]))->assertRedirect();
+        $this->actingIn($owner, $tenant)->get($url)->assertInertia(fn (Assert $page) => $page
+            ->where('learningPlan.curriculum_ready_count', 5)
+            ->where('learningPlan.curriculum_total_count', 5)
+            ->where('learningPlan.curriculum_status_label', '5 of 5 subjects ready'));
+
+        $this->actingIn($owner, $tenant)->patch(route('workspace.learning-plan.subjects.show', [$enrollment, $socialStudies]))->assertRedirect();
+        $this->actingIn($owner, $tenant)->get($url)->assertInertia(fn (Assert $page) => $page
+            ->where('learningPlan.curriculum_ready_count', 5)
+            ->where('learningPlan.curriculum_total_count', 6)
+            ->where('learningPlan.curriculum_status_label', '5 of 6 subjects ready'));
+
+        $approved['SS']->update(['status' => 'approved', 'approved_by_user_id' => $owner->id, 'approved_at' => now()]);
+        $this->actingIn($owner, $tenant)->get($url)->assertInertia(fn (Assert $page) => $page
+            ->where('learningPlan.curriculum_ready_count', 6)
+            ->where('learningPlan.curriculum_total_count', 6)
+            ->where('learningPlan.curriculum_status_label', '6 of 6 subjects ready'));
+    }
+
     public function test_tenant_subject_visibility_excludes_another_tenants_custom_subject(): void
     {
         [$ownerA, $tenantA] = $this->adult('owner', 'Academy A');
@@ -526,6 +656,101 @@ class CurriculumIntakeTest extends TestCase
     private function subjectCreateUrl(int $studentId, int $yearId, int $subjectId): string
     {
         return $this->subjectStoreUrl($studentId, $yearId, $subjectId).'/add';
+    }
+
+    private function createApprovedOutline(
+        User $owner,
+        Tenant $tenant,
+        int $studentId,
+        int $yearId,
+        int $gradeId,
+        int $providerId,
+        int $frameworkId,
+        CurriculumPackage $package,
+        string $subjectCode,
+        string $parserKey,
+        int $unitCount,
+        bool $periodless,
+    ): CurriculumImport {
+        $subject = Subject::query()->where('code', $subjectCode)->firstOrFail();
+        $this->actingIn($owner, $tenant)->post($this->subjectStoreUrl($studentId, $yearId, $subject->id), $this->subjectPayload([
+            'title' => $subjectCode.' curriculum', 'source_file' => $this->pdf(strtolower($subjectCode).'-curriculum.pdf'),
+        ]))->assertSessionHasNoErrors();
+        $source = AcademicSource::query()->where('title', $subjectCode.' curriculum')->firstOrFail();
+        $source->update(['review_status' => 'reviewed']);
+        $course = Course::create([
+            'subject_id' => $subject->id, 'standards_framework_id' => $frameworkId,
+            'education_provider_id' => $providerId, 'name' => $subject->name.' Grade 5', 'code' => $subjectCode.'-5-CARD',
+            'minimum_grade_level_id' => $gradeId, 'maximum_grade_level_id' => $gradeId, 'status' => 'draft',
+        ]);
+        $mapping = $package->courseMappings()->create([
+            'course_id' => $course->id, 'grade_level_id' => $gradeId,
+            'sort_order' => $package->courseMappings()->count(), 'required' => true,
+        ]);
+        $import = CurriculumImport::create([
+            'academic_source_id' => $source->id, 'academic_source_file_id' => $source->currentFile->id,
+            'curriculum_package_id' => $package->id, 'curriculum_package_course_id' => $mapping->id,
+            'subject_id' => $subject->id, 'grade_level_id' => $gradeId, 'school_year_id' => $yearId,
+            'standards_framework_id' => $frameworkId, 'created_by_user_id' => $owner->id,
+            'approved_by_user_id' => $owner->id, 'status' => 'approved', 'parser_key' => $parserKey,
+            'parser_version' => 'card-state-v1', 'approved_at' => now(),
+        ]);
+        $period = null;
+        if (! $periodless && $unitCount > 0) {
+            $proposal = $import->proposals()->create([
+                'proposal_type' => 'period', 'included' => true, 'sequence' => 1,
+                'name' => 'Reporting Period 1', 'reporting_period' => 'Reporting Period 1',
+            ]);
+            $period = CurriculumPeriod::create([
+                'curriculum_package_course_id' => $mapping->id, 'name' => 'Reporting Period 1',
+                'sequence' => 1, 'period_type' => 'reporting_period', 'status' => 'draft',
+                'academic_source_id' => $source->id, 'academic_source_file_id' => $source->currentFile->id,
+                'curriculum_import_id' => $import->id, 'curriculum_import_proposal_id' => $proposal->id,
+                'parser_key' => $parserKey, 'parser_version' => 'card-state-v1',
+            ]);
+        }
+        for ($sequence = 1; $sequence <= $unitCount; $sequence++) {
+            $proposal = $import->proposals()->create([
+                'proposal_type' => 'unit', 'included' => true, 'sequence' => $sequence,
+                'name' => $subjectCode.' Unit '.$sequence, 'unit_type' => 'instructional',
+                'parser_metadata' => $periodless ? ['duration_text' => '4 weeks', 'duration_origin' => 'source'] : null,
+            ]);
+            $unit = CurriculumUnit::create([
+                'curriculum_period_id' => $period?->id, 'curriculum_package_course_id' => $mapping->id,
+                'name' => $subjectCode.' Unit '.$sequence, 'summary' => 'Unit summary '.$sequence,
+                'sequence' => $sequence, 'unit_type' => 'instructional', 'included' => true,
+                'metadata' => $proposal->parser_metadata, 'academic_source_id' => $source->id,
+                'academic_source_file_id' => $source->currentFile->id, 'curriculum_import_id' => $import->id,
+                'curriculum_import_proposal_id' => $proposal->id, 'parser_key' => $parserKey,
+                'parser_version' => 'card-state-v1',
+            ]);
+            if ($periodless && $sequence === 1) {
+                $projectProposal = $import->proposals()->create([
+                    'parent_proposal_id' => $proposal->id, 'proposal_type' => 'component',
+                    'included' => true, 'sequence' => 1, 'name' => 'Anchor Project', 'component_type' => 'project',
+                ]);
+                $project = CurriculumUnitComponent::create([
+                    'curriculum_unit_id' => $unit->id, 'component_type' => 'project', 'name' => 'Anchor Project',
+                    'description' => 'Build and demonstrate the unit project.', 'sequence' => 1,
+                    'academic_source_id' => $source->id, 'academic_source_file_id' => $source->currentFile->id,
+                    'curriculum_import_id' => $import->id, 'curriculum_import_proposal_id' => $projectProposal->id,
+                    'parser_key' => $parserKey, 'parser_version' => 'card-state-v1',
+                ]);
+                $milestoneProposal = $import->proposals()->create([
+                    'parent_proposal_id' => $projectProposal->id, 'proposal_type' => 'component',
+                    'included' => true, 'sequence' => 1, 'name' => 'Project Milestone', 'component_type' => 'project_milestone',
+                ]);
+                CurriculumUnitComponent::create([
+                    'curriculum_unit_id' => $unit->id, 'parent_component_id' => $project->id,
+                    'component_type' => 'project_milestone', 'name' => 'Project Milestone', 'sequence' => 1,
+                    'academic_source_id' => $source->id, 'academic_source_file_id' => $source->currentFile->id,
+                    'curriculum_import_id' => $import->id, 'curriculum_import_proposal_id' => $milestoneProposal->id,
+                    'parser_key' => $parserKey, 'parser_version' => 'card-state-v1',
+                ]);
+            }
+        }
+
+        return $import;
     }
 
     private function subjectStoreUrl(int $studentId, int $yearId, int $subjectId): string

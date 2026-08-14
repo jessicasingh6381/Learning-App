@@ -6,6 +6,7 @@ use App\Models\Concerns\BelongsToTenant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class CurriculumUnitComponent extends Model
 {
@@ -32,4 +33,9 @@ class CurriculumUnitComponent extends Model
     public function descendants(): HasMany { return $this->children()->with('descendants'); }
     public function import(): BelongsTo { return $this->belongsTo(CurriculumImport::class, 'curriculum_import_id'); }
     public function proposal(): BelongsTo { return $this->belongsTo(CurriculumImportProposal::class, 'curriculum_import_proposal_id'); }
+    public function lessons(): BelongsToMany
+    {
+        return $this->belongsToMany(Lesson::class, 'lesson_curriculum_components')
+            ->withPivot(['tenant_id', 'role', 'sequence'])->withTimestamps();
+    }
 }

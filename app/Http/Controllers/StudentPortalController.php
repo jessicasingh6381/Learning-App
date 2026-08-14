@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Student;
+use App\Services\LessonAvailabilityService;
 use App\Tenancy\TenantContext;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,9 +16,14 @@ class StudentPortalController extends Controller
         return Inertia::render('StudentPortal/Home', $this->portalProps($request));
     }
 
-    public function learning(Request $request): Response
+    public function learning(Request $request, LessonAvailabilityService $availability): Response
     {
-        return Inertia::render('StudentPortal/Learning', $this->portalProps($request));
+        $props = $this->portalProps($request);
+        $student = Student::query()->where('user_id', $request->user()->id)->firstOrFail();
+        $enrollment = $student->enrollments()->where('status', 'active')->first();
+        $props['subjects'] = $enrollment ? $availability->nextForEnrollment($enrollment) : [];
+
+        return Inertia::render('StudentPortal/Learning', $props);
     }
 
     public function profile(Request $request): Response

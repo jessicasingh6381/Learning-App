@@ -43,4 +43,5 @@ class CurriculumImport extends Model
     public function units(): HasMany { return $this->hasMany(CurriculumUnit::class); }
     public function standardAlignments(): HasMany { return $this->hasMany(CurriculumUnitStandardAlignment::class); }
     public function standards(): HasMany { return $this->hasMany(Standard::class); }
+    public function lessonPlans(): HasMany { return $this->hasMany(LessonPlan::class); }
 }

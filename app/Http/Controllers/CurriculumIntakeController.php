@@ -63,6 +63,7 @@ class CurriculumIntakeController extends Controller
         Gate::authorize('create', AcademicSource::class);
         $data = $intake->buildAdd($student->id, $schoolYear->id, $subject->id);
         $fromOverview = $request->query('from') === 'overview';
+        $sourceIntent = $request->query('intent') === 'pacing' ? 'pacing' : null;
 
         return Inertia::render('Workspace/CurriculumIntake', [
             ...$data,
@@ -71,6 +72,7 @@ class CurriculumIntakeController extends Controller
                 ? route('workspace.curriculum-intake', ['student_id' => $student->id, 'school_year_id' => $schoolYear->id])
                 : route('workspace.learning-plan', ['student_id' => $student->id]),
             'returnTo' => $fromOverview ? 'overview' : 'learning-plan',
+            'sourceIntent' => $sourceIntent,
             'maxUploadMegabytes' => (int) config('academic_sources.max_upload_kilobytes') / 1024,
         ]);
     }
@@ -126,7 +128,8 @@ class CurriculumIntakeController extends Controller
             ->whereIn('status', ['planned', 'active'])
             ->firstOrFail();
 
-        $this->persist($data, $enrollment, $request->file('source_file'), $provider['id'] ?? null, $audit, $files, $links);
+        $sourceCategory = $request->query('intent') === 'pacing' ? 'pacing' : 'curriculum';
+        $this->persist($data, $enrollment, $request->file('source_file'), $provider['id'] ?? null, $audit, $files, $links, $sourceCategory);
 
         return redirect()->route('workspace.curriculum-intake', [
             'student_id' => $student->id,
@@ -142,8 +145,9 @@ class CurriculumIntakeController extends Controller
         AuditService $audit,
         AcademicSourceFileService $files,
         AcademicSourceLinkService $links,
+        string $sourceCategory = 'curriculum',
     ): void {
-        DB::transaction(function () use ($data, $enrollment, $upload, $providerId, $audit, $files, $links): void {
+        DB::transaction(function () use ($data, $enrollment, $upload, $providerId, $audit, $files, $links, $sourceCategory): void {
             $source = AcademicSource::create([
                 'education_provider_id' => $providerId,
                 'school_year_id' => $enrollment->school_year_id,
@@ -151,7 +155,7 @@ class CurriculumIntakeController extends Controller
                 'title' => $data['title'],
                 'description' => $data['source_kind'] === 'manual' ? $data['manual_reference'] : null,
                 'source_kind' => $data['source_kind'],
-                'source_category' => 'curriculum',
+                'source_category' => $sourceCategory,
                 'authority_level' => match ($data['source_origin']) {
                     'provider', 'publisher' => 'official_provider',
                     'custom' => 'tenant_created',
@@ -186,7 +190,7 @@ class CurriculumIntakeController extends Controller
         Gate::authorize('curriculum.manage');
         Gate::authorize('update', $source);
 
-        if ($source->source_category !== 'curriculum' || $source->review_status !== 'reviewed') {
+        if (! in_array($source->source_category, ['curriculum', 'pacing', 'scope_and_sequence'], true) || $source->review_status !== 'reviewed') {
             throw ValidationException::withMessages(['review_status' => 'Mark this curriculum source reviewed before creating a draft outline.']);
         }
 

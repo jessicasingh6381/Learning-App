@@ -67,6 +67,35 @@ describe('curriculum outline import UI', () => {
         expect(wrapper.find('nav').exists()).toBe(false);
     });
 
+    it('shows Create curriculum outline for a confidently recognized custom curriculum source', () => {
+        const wrapper = mount(SourcesShow, { props: {
+            source: { id: 6, title: '5 - Python', description: '', source_kind: 'upload', source_category: 'curriculum', authority_level: 'teacher_created', review_status: 'reviewed', processing_status: 'not_requested', archived_at: null, school_year_id: 1, education_provider: null, school_year: { name: '2026-2027' }, grade_level: { name: 'Grade 5' }, files: [{ id: 6, version_number: 1, is_current: true, original_filename: 'Technology.pdf', mime_type: 'application/pdf', extension: 'pdf', file_size: 100, checksum_sha256: 'f'.repeat(64) }] },
+            links: [], linkChoices: { subject: [] }, courseChoices: { subjects: [], gradeLevels: [], providers: [], frameworks: [] }, courseDefaults: {},
+            calendarSetup: { is_calendar: false, linked_profiles: [], current_file_is_pdf: true, imports: [] },
+            curriculumSetup: { is_curriculum: true, current_file_is_pdf: true, subject: { id: 9, name: 'Technology', code: 'TECH' }, workflow_state: 'ready', primary_action_label: 'Create curriculum outline', primary_action_url: '/sources/6/curriculum-imports', primary_action_method: 'post', back_url: '/learning-plan/curriculum-intake', capability: { state: 'supported', document_family: 'custom-homeschool-curriculum', internal_diagnostic: null }, imports: [] },
+            permissions: { manage: true, review: true, download: true }, reviewTransitions: [],
+        }, global: { stubs } });
+        expect(wrapper.text()).toContain('Create curriculum outline');
+        expect(wrapper.text()).toContain('Outline extraction supported');
+        expect(wrapper.text()).toContain('Recognized format: custom-homeschool-curriculum');
+        expect(wrapper.text()).not.toContain('Set up this document format');
+    });
+
+    it('lets a confidently recognized Spanish source proceed directly without noisy format onboarding', () => {
+        const wrapper = mount(SourcesShow, { props: {
+            source: { id: 7, title: '5 - Spanish', description: '', source_kind: 'upload', source_category: 'curriculum', authority_level: 'teacher_created', review_status: 'reviewed', processing_status: 'not_requested', archived_at: null, school_year_id: 1, education_provider: null, school_year: { name: '2026-2027' }, grade_level: { name: 'Grade 5' }, files: [{ id: 7, version_number: 1, is_current: true, original_filename: 'Grade_5_Beginner_Spanish.pdf', mime_type: 'application/pdf', extension: 'pdf', file_size: 100, checksum_sha256: '7'.repeat(64) }] },
+            links: [], linkChoices: { subject: [] }, courseChoices: { subjects: [], gradeLevels: [], providers: [], frameworks: [] }, courseDefaults: {},
+            calendarSetup: { is_calendar: false, linked_profiles: [], current_file_is_pdf: true, imports: [] },
+            curriculumSetup: { is_curriculum: true, current_file_is_pdf: true, subject: { id: 10, name: 'Spanish', code: 'SPAN' }, workflow_state: 'ready', primary_action_label: 'Create curriculum outline', primary_action_url: '/sources/7/curriculum-imports', primary_action_method: 'post', back_url: '/learning-plan/curriculum-intake', capability: { state: 'supported', document_family: 'custom-homeschool-curriculum', internal_diagnostic: null }, imports: [], format_profile: { id: 3, status: 'superseded' } },
+            permissions: { manage: true, review: true, download: true }, reviewTransitions: [],
+        }, global: { stubs } });
+        expect(wrapper.text()).toContain('Create curriculum outline');
+        expect(wrapper.text()).toContain('Outline extraction supported');
+        expect(wrapper.text()).toContain('Recognized format: custom-homeschool-curriculum');
+        expect(wrapper.text()).not.toContain('Continue document setup');
+        expect(wrapper.text()).not.toContain('Set up this document format');
+    });
+
     it('shows a standards-specific source action without curriculum-unit language', async () => {
         const wrapper = mount(SourcesShow, { props: {
             source: { id: 5, title: '5th - SS', source_kind: 'upload', source_category: 'curriculum', authority_level: 'official_provider', review_status: 'reviewed', processing_status: 'completed', archived_at: null, school_year_id: 1, education_provider: { name: 'Cypress-Fairbanks Independent School District' }, school_year: { name: '2026-2027' }, grade_level: { name: 'Grade 5' }, files: [{ id: 5, version_number: 1, is_current: true, original_filename: 'Social Studies.pdf', mime_type: 'application/pdf', extension: 'pdf', file_size: 100, checksum_sha256: 'e'.repeat(64) }] },
@@ -209,6 +238,76 @@ describe('curriculum outline import UI', () => {
         expect(wrapper.get('details.curriculum-component details').attributes('open')).toBeUndefined();
         await wrapper.get('#summary-2').setValue('Reviewer-edited summary');
         expect(wrapper.text()).toContain('Unsaved changes');
+    });
+
+    it('reviews eight custom units without fake reporting periods and progressively discloses milestones', () => {
+        const project = component({ id: 13, parent_proposal_id: 2, name: 'Astronaut & Spacecraft Mission Builder', component_type: 'project', children: [component({ id: 14, parent_proposal_id: 13, name: 'Mission Briefing', component_type: 'project_milestone', description: 'Skill: print()\nProject addition: Create the mission title.' })] });
+        const first = proposal({ id: 2, parent_proposal_id: null, name: 'Unit 1 — Mission Control: Make the Computer Do Stuff', summary: 'Computers follow instructions and respond to input.', parser_metadata: { duration_text: '4 weeks', duration_origin: 'source', schedule_origin: 'calendar_calculated', schedule_calendar_name: 'Approved school calendar' }, planned_start_date: '2026-08-12', planned_end_date: '2026-09-09', estimated_days: 20, unit_type: 'instructional', warnings: [], children: [
+            component({ id: 11, parent_proposal_id: 2, name: 'Big Idea', component_type: 'overview', description: 'Computers follow instructions and respond to input.' }),
+            component({ id: 12, parent_proposal_id: 2, name: 'Learning Objectives', component_type: 'objective', description: 'Run a Python program.' }),
+            project,
+            component({ id: 15, parent_proposal_id: 2, name: 'Challenge Missions', component_type: 'extension', description: 'Add ASCII rocket art.' }),
+            component({ id: 16, parent_proposal_id: 2, name: 'Evidence of Learning', component_type: 'assessment_support', description: 'Explain what a variable stores.' }),
+            component({ id: 17, parent_proposal_id: 2, name: 'Suggested Duration', component_type: 'duration', description: '4 weeks' }),
+        ] });
+        const units = [first, ...Array.from({ length: 7 }, (_, index) => proposal({ id: 20 + index, parent_proposal_id: null, sequence: index + 2, name: `Unit ${index + 2} — Custom Unit`, summary: `Big idea ${index + 2}`, parser_metadata: { duration_text: '4 weeks' }, planned_start_date: null, planned_end_date: null, estimated_days: null, unit_type: 'instructional', warnings: [], children: [] }))];
+        const custom = props({
+            curriculumImport: { ...props().curriculumImport, parser_key: 'custom-homeschool-curriculum', parser_version: '1.0.0', diagnostic: 'Structured custom curriculum recognized automatically.' },
+            context: { ...props().context, subject: 'Technology', course: 'Grade 5 Technology' },
+            periods: [{ id: 'course-outline', proposal_type: 'course', name: 'Course outline', children: units }],
+            componentTypes: [...props().componentTypes, 'overview', 'objective', 'project', 'project_milestone', 'extension', 'duration'],
+        });
+        const wrapper = mount(CurriculumImportShow, { props: custom, global: { stubs } });
+        expect(wrapper.text()).toContain('Course outline');
+        expect(wrapper.text()).toContain('without reporting periods or calendar dates');
+        expect(wrapper.findAll('input[id^="name-"]').filter((input) => units.some((unit) => `name-${unit.id}` === input.attributes('id')))).toHaveLength(8);
+        expect(wrapper.get('#summary-2').element).toHaveProperty('value', 'Computers follow instructions and respond to input.');
+        expect(wrapper.text()).toContain('Duration: 4 weeks');
+        expect(wrapper.text()).toContain('Source PDF');
+        expect(wrapper.text()).toContain('Anchor project: Astronaut & Spacecraft Mission Builder');
+        expect(wrapper.text()).toContain('Calculated from school calendar');
+        expect(wrapper.text()).toContain('Approved school calendar');
+        expect(wrapper.get('input[aria-label="Start date for Unit 1 — Mission Control: Make the Computer Do Stuff"]').element).toHaveProperty('value', '2026-08-12');
+        expect(wrapper.get('input[aria-label="End date for Unit 1 — Mission Control: Make the Computer Do Stuff"]').element).toHaveProperty('value', '2026-09-09');
+        expect(wrapper.get('input[aria-label="Estimated days for Unit 1 — Mission Control: Make the Computer Do Stuff"]').element).toHaveProperty('value', '20');
+        expect(wrapper.text()).toContain('Mission Briefing');
+        expect(wrapper.get('details.curriculum-components').attributes('open')).toBeUndefined();
+        expect(wrapper.text()).not.toContain('Assessment Philosophy');
+        expect(wrapper.text()).not.toContain('1st Grading Period');
+    });
+
+    it('keeps Spanish evidence and language sections progressively disclosed inside eight clean units', () => {
+        const names = [
+            'Unit 1 - Hola, Soy Yo', 'Unit 2 - Números, Colores y Mi Día',
+            'Unit 3 - Mi Familia y Las Personas', 'Unit 4 - Mi Escuela Ideal',
+            'Unit 5 - Tengo Hambre', 'Unit 6 - Mi Mundo',
+            'Unit 7 - Vamos de Viaje', 'Unit 8 - Mi Aventura en Español',
+        ];
+        const units = names.map((name, index) => proposal({
+            id: 100 + index, parent_proposal_id: null, sequence: index + 1, name,
+            summary: `Idea principal ${index + 1}.`, parser_metadata: { duration_text: index === 7 ? '5 weeks' : '4 weeks' },
+            planned_start_date: null, planned_end_date: null, estimated_days: null, warnings: [],
+            children: index === 0 ? [
+                component({ id: 201, parent_proposal_id: 100, name: 'Vocabulary', component_type: 'resource', description: 'hola' }),
+                component({ id: 202, parent_proposal_id: 100, name: 'Useful Phrases', component_type: 'resource', description: 'Mucho gusto.' }),
+                component({ id: 203, parent_proposal_id: 100, name: 'Evidence of Learning', component_type: 'assessment_support', description: 'Present the passport.' }),
+            ] : [],
+        }));
+        const wrapper = mount(CurriculumImportShow, { props: props({
+            curriculumImport: { ...props().curriculumImport, parser_key: 'custom-homeschool-curriculum', parser_version: '1.1.0' },
+            context: { ...props().context, subject: 'Spanish', course: 'Grade 5 Spanish' },
+            periods: [{ id: 'course-outline', proposal_type: 'course', name: 'Course outline', children: units }],
+            componentTypes: [...props().componentTypes, 'overview', 'objective', 'project', 'project_milestone', 'extension', 'duration'],
+        }), global: { stubs } });
+        expect(units.map((unit) => (wrapper.get(`#name-${unit.id}`).element as HTMLInputElement).value)).toEqual(names);
+        expect(wrapper.findAll('details.curriculum-components')).toHaveLength(1);
+        expect(wrapper.get('details.curriculum-components').attributes('open')).toBeUndefined();
+        expect(wrapper.get('details.curriculum-components').text()).toContain('Vocabulary');
+        expect(wrapper.get('details.curriculum-components').text()).toContain('Useful Phrases');
+        expect(wrapper.get('details.curriculum-components').text()).toContain('Evidence of Learning');
+        expect(wrapper.text()).not.toContain('Unit 1: Hola, Soy Yo I can greet someone');
+        expect(wrapper.text()).not.toContain('Assessment Philosophy');
+        expect(wrapper.text()).not.toContain('1st Grading Period');
     });
 
     it('keeps component edits after field-specific save errors and renders approved components read-only', async () => {
