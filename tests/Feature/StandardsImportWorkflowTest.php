@@ -275,6 +275,10 @@ class StandardsImportWorkflowTest extends TestCase
 
     public function test_database_failure_returns_safe_approval_error_and_rolls_back(): void
     {
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+            $this->markTestSkipped('This failure-injection trigger uses SQLite-specific RAISE syntax.');
+        }
+
         [$owner, $tenant, $source] = $this->context(); app(CurriculumParserCapabilityService::class)->assess($source, true);
         $this->actingIn($owner, $tenant)->post(route('academic.sources.standards-imports.store', $source));
         $import = CurriculumImport::firstOrFail();

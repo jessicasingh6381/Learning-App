@@ -58,7 +58,7 @@ class AcademicSourceController extends Controller
         $sources = AcademicSource::query()
             ->with(['educationProvider:id,name', 'schoolYear:id,name', 'gradeLevel:id,name', 'currentFile'])
             ->when($filters['search'] ?? null, fn ($query, $search) => $query->where(function ($searchQuery) use ($search) {
-                $searchQuery->where('title', 'like', '%'.$search.'%')->orWhere('description', 'like', '%'.$search.'%');
+                $searchQuery->whereLike('title', '%'.$search.'%')->orWhereLike('description', '%'.$search.'%');
             }))
             ->when($filters['category'] ?? null, fn ($query, $value) => $query->where('source_category', $value))
             ->when($filters['kind'] ?? null, fn ($query, $value) => $query->where('source_kind', $value))
