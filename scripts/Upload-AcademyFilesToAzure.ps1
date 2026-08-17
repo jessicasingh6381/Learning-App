@@ -46,11 +46,66 @@ function Get-SafeRelativePath {
     return $relative
 }
 
+function Resolve-AzureCliCommand {
+    $command = Get-Command az -CommandType Application, ExternalScript -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($command) {
+        return $command.Source
+    }
+
+    $candidates = @(
+        'C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd',
+        'C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\wbin\az.cmd'
+    )
+    if ($env:LOCALAPPDATA) {
+        $candidates += @(
+            (Join-Path $env:LOCALAPPDATA 'Programs\Microsoft SDKs\Azure\CLI2\wbin\az.cmd'),
+            (Join-Path $env:LOCALAPPDATA 'Programs\Azure CLI\wbin\az.cmd'),
+            (Join-Path $env:LOCALAPPDATA 'Microsoft\AzureCLI\wbin\az.cmd')
+        )
+    }
+
+    $uninstallRoots = @(
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    $installLocations = @(Get-ItemProperty $uninstallRoots -ErrorAction SilentlyContinue |
+        Where-Object { $_.DisplayName -like '*Azure CLI*' -and $_.InstallLocation } |
+        Select-Object -ExpandProperty InstallLocation)
+    foreach ($installLocation in $installLocations) {
+        $candidates += (Join-Path $installLocation 'wbin\az.cmd')
+        $candidates += (Join-Path $installLocation 'az.cmd')
+    }
+
+    foreach ($candidate in @($candidates | Select-Object -Unique)) {
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+
+    return $null
+}
+
 if ($RemoteRoot -ne '/home/site/storage/app/private') {
     throw 'RemoteRoot is restricted to /home/site/storage/app/private.'
 }
 if ($Execute -and $ConfirmTarget -cne $expectedConfirmation) {
     throw "Execution requires -ConfirmTarget '$expectedConfirmation'."
+}
+
+$azureCli = $null
+if ($Execute) {
+    $azureCli = Resolve-AzureCliCommand
+    if (-not $azureCli) {
+        throw @'
+Azure CLI (az) is required for -Execute but is not installed or could not be found.
+Install the official 64-bit Azure CLI with:
+winget install --exact --id Microsoft.AzureCLI
+Then close and reopen PowerShell, run az login, and retry. Dry-run mode does not require Azure CLI.
+'@
+    }
+    Write-Host "Azure CLI: $azureCli"
 }
 
 $files = @(Get-ChildItem -LiteralPath $resolvedStaging -Recurse -File)
@@ -61,7 +116,7 @@ Write-Host "Files: $($files.Count); bytes: $(($files | Measure-Object -Property 
 $uploads = @()
 $accessToken = $null
 if ($Execute) {
-    $accessToken = (& az account get-access-token --query accessToken --output tsv --only-show-errors)
+    $accessToken = (& $azureCli account get-access-token --query accessToken --output tsv --only-show-errors)
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($accessToken)) {
         throw 'Could not acquire an Azure token for the Kudu overwrite-safety preflight.'
     }
@@ -106,7 +161,7 @@ foreach ($file in $files) {
 
 if ($Execute) {
     foreach ($upload in $uploads) {
-        & az webapp deploy --resource-group $ResourceGroup --name $AppName --src-path $upload.File.FullName `
+        & $azureCli webapp deploy --resource-group $ResourceGroup --name $AppName --src-path $upload.File.FullName `
             --type static --target-path $upload.Target --clean false --restart false --only-show-errors
         if ($LASTEXITCODE -ne 0) {
             throw "Azure upload failed for $($upload.Relative)."
