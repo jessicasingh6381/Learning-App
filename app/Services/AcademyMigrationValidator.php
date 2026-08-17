@@ -7,6 +7,8 @@ use RuntimeException;
 
 final class AcademyMigrationValidator
 {
+    public function __construct(private readonly AcademySchemaComparator $schemaComparator) {}
+
     /** @return array{counts: array<string, array{source:int,target:int}>, metrics: array<string, array{source:int,target:int}>, orphans: array<string,int>} */
     public function validate(ConnectionInterface $source, ConnectionInterface $target): array
     {
@@ -64,11 +66,7 @@ final class AcademyMigrationValidator
     {
         $errors = [];
         foreach (AcademyMigrationManifest::TABLES as $table) {
-            $sourceColumns = $source->getSchemaBuilder()->getColumnListing($table);
-            $targetColumns = $target->getSchemaBuilder()->getColumnListing($table);
-            if ($sourceColumns !== $targetColumns) {
-                $errors[] = "Column mismatch for {$table}: migrations differ between source and target.";
-            }
+            $errors = [...$errors, ...$this->schemaComparator->compare($source, $target, $table)];
         }
 
         return $errors;

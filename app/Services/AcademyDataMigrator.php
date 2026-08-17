@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use JsonException;
 use RuntimeException;
 use Throwable;
@@ -144,6 +145,14 @@ final class AcademyDataMigrator
                 }
                 $row[$column] = (bool) $value;
                 $transformations['mysql_boolean_to_postgresql_boolean'] = ($transformations['mysql_boolean_to_postgresql_boolean'] ?? 0) + 1;
+            } elseif (in_array($type, ['smallint', 'integer', 'bigint'], true)) {
+                $this->assertIntegerFits($value, $type, $table, $column, $row['id'] ?? null);
+                $transformations['integer_range_validated'] = ($transformations['integer_range_validated'] ?? 0) + 1;
+            } elseif ($type === 'uuid') {
+                if (! is_string($value) || ! Str::isUuid($value)) {
+                    throw new RuntimeException("Invalid UUID in {$table}.{$column} for row ID ".($row['id'] ?? '?').'.');
+                }
+                $transformations['uuid_validated'] = ($transformations['uuid_validated'] ?? 0) + 1;
             } elseif (in_array($type, ['json', 'jsonb'], true)) {
                 $row[$column] = $this->normalizeJson($value, $table, $column, $row['id'] ?? null);
                 $transformations['json_validated'] = ($transformations['json_validated'] ?? 0) + 1;
@@ -156,6 +165,19 @@ final class AcademyDataMigrator
         }
 
         return $row;
+    }
+
+    private function assertIntegerFits(mixed $value, string $type, string $table, string $column, mixed $id): void
+    {
+        $integer = filter_var($value, FILTER_VALIDATE_INT);
+        $bounds = match ($type) {
+            'smallint' => [-32768, 32767],
+            'integer' => [-2147483648, 2147483647],
+            'bigint' => [PHP_INT_MIN, PHP_INT_MAX],
+        };
+        if ($integer === false || $integer < $bounds[0] || $integer > $bounds[1]) {
+            throw new RuntimeException("Integer outside PostgreSQL {$type} range in {$table}.{$column} for row ID ".($id ?? '?').'.');
+        }
     }
 
     private function normalizeJson(mixed $value, string $table, string $column, mixed $id): string
