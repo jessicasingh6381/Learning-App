@@ -12,6 +12,40 @@ $ErrorActionPreference = 'Stop'
 $resolvedStaging = (Resolve-Path -LiteralPath $StagingDirectory).Path
 $expectedConfirmation = "${AppName}:${RemoteRoot}"
 
+function Get-SafeRelativePath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $RootPath,
+        [Parameter(Mandatory = $true)]
+        [string] $FilePath
+    )
+
+    $separator = [IO.Path]::DirectorySeparatorChar
+    $alternateSeparator = [IO.Path]::AltDirectorySeparatorChar
+    $trimCharacters = [char[]] @($separator, $alternateSeparator)
+    $fullRoot = [IO.Path]::GetFullPath($RootPath).TrimEnd($trimCharacters)
+    $fullFile = [IO.Path]::GetFullPath($FilePath)
+    $rootPrefix = $fullRoot + $separator
+
+    if (-not $fullFile.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "File is outside the staging directory: $fullFile"
+    }
+
+    $relative = $fullFile.Substring($rootPrefix.Length)
+    $relative = $relative.Replace($separator, [char] '/')
+    if ($alternateSeparator -ne $separator) {
+        $relative = $relative.Replace($alternateSeparator, [char] '/')
+    }
+
+    $segments = @($relative.Split('/'))
+    if ([string]::IsNullOrWhiteSpace($relative) -or [IO.Path]::IsPathRooted($relative) -or
+        $segments.Count -eq 0 -or @($segments | Where-Object { $_ -eq '' -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
+        throw "Unsafe relative path: $relative"
+    }
+
+    return $relative
+}
+
 if ($RemoteRoot -ne '/home/site/storage/app/private') {
     throw 'RemoteRoot is restricted to /home/site/storage/app/private.'
 }
@@ -34,10 +68,7 @@ if ($Execute) {
 }
 
 foreach ($file in $files) {
-    $relative = [IO.Path]::GetRelativePath($resolvedStaging, $file.FullName).Replace('\\', '/')
-    if ($relative.StartsWith('../') -or [IO.Path]::IsPathRooted($relative)) {
-        throw "Unsafe relative path: $relative"
-    }
+    $relative = Get-SafeRelativePath -RootPath $resolvedStaging -FilePath $file.FullName
     $target = "$RemoteRoot/$relative"
     Write-Host "$($file.FullName) -> $target"
     if ($Execute) {
