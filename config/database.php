@@ -2,6 +2,17 @@
 
 use Illuminate\Support\Str;
 
+$mysqlSslCa = env('MYSQL_ATTR_SSL_CA');
+$mysqlOptions = [];
+
+if (extension_loaded('pdo_mysql') && is_string($mysqlSslCa) && trim($mysqlSslCa) !== '') {
+    $sslCaAttribute = defined('Pdo\\Mysql::ATTR_SSL_CA')
+        ? constant('Pdo\\Mysql::ATTR_SSL_CA')
+        : constant('PDO::MYSQL_ATTR_SSL_CA');
+
+    $mysqlOptions[$sslCaAttribute] = $mysqlSslCa;
+}
+
 return [
 
     /*
@@ -57,9 +68,7 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
-            'options' => extension_loaded('pdo_mysql') ? array_filter([
-                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-            ]) : [],
+            'options' => $mysqlOptions,
         ],
 
         'mariadb' => [
@@ -77,9 +86,7 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
-            'options' => extension_loaded('pdo_mysql') ? array_filter([
-                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-            ]) : [],
+            'options' => $mysqlOptions,
         ],
 
         'pgsql' => [
@@ -95,6 +102,37 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'require'),
+        ],
+
+        'migration_source' => [
+            'driver' => 'mysql',
+            'host' => env('MIGRATION_SOURCE_HOST', '127.0.0.1'),
+            'port' => env('MIGRATION_SOURCE_PORT', '3306'),
+            'database' => env('MIGRATION_SOURCE_DATABASE'),
+            'username' => env('MIGRATION_SOURCE_USERNAME'),
+            'password' => env('MIGRATION_SOURCE_PASSWORD'),
+            'unix_socket' => env('MIGRATION_SOURCE_SOCKET', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => $mysqlOptions,
+        ],
+
+        'migration_target' => [
+            'driver' => 'pgsql',
+            'host' => env('MIGRATION_TARGET_HOST'),
+            'port' => env('MIGRATION_TARGET_PORT', '5432'),
+            'database' => env('MIGRATION_TARGET_DATABASE'),
+            'username' => env('MIGRATION_TARGET_USERNAME'),
+            'password' => env('MIGRATION_TARGET_PASSWORD'),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('MIGRATION_TARGET_SSLMODE', 'require'),
         ],
 
         'sqlsrv' => [
