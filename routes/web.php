@@ -14,6 +14,8 @@ use App\Http\Controllers\Academic\EducationProviderController;
 use App\Http\Controllers\Academic\StandardsFrameworkController;
 use App\Http\Controllers\Academic\SubjectController;
 use App\Http\Controllers\CurriculumIntakeController;
+use App\Http\Controllers\CreativeWritingJournalController;
+use App\Http\Controllers\CreativeWritingPromptController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EnrollmentController;
 use App\Http\Controllers\LearningPlanSubjectPreferenceController;
@@ -27,6 +29,7 @@ use App\Http\Controllers\StudentAccessController;
 use App\Http\Controllers\StudentController;
 use App\Http\Controllers\StudentPasswordController;
 use App\Http\Controllers\StudentPortalController;
+use App\Http\Controllers\StudentCreativeWritingController;
 use App\Http\Controllers\StudentLessonExperienceController;
 use App\Http\Controllers\TenantController;
 use App\Http\Controllers\TenantMemberController;
@@ -76,6 +79,13 @@ Route::middleware(['auth', 'admin.user', 'tenant'])->group(function () {
     Route::post('/learning-plan/curriculum-intake/students/{student}/school-years/{schoolYear}/subjects/{subject}', [CurriculumIntakeController::class, 'storeSubject'])->name('workspace.curriculum-intake.subject.store');
     Route::post('/learning-plan/curriculum-intake/sources/{source}/draft', [CurriculumIntakeController::class, 'createDraft'])->name('workspace.curriculum-intake.draft');
     Route::get('/calendar', [WorkspaceController::class, 'calendar'])->name('workspace.calendar');
+    Route::get('/creative-writing', [CreativeWritingJournalController::class, 'index'])->name('creative-writing.index');
+    Route::get('/creative-writing/entries/{entry}', [CreativeWritingJournalController::class, 'show'])->name('creative-writing.show');
+    Route::patch('/creative-writing/entries/{entry}/feedback', [CreativeWritingJournalController::class, 'feedback'])->name('creative-writing.feedback');
+    Route::get('/creative-writing/prompts', [CreativeWritingPromptController::class, 'index'])->name('creative-writing.prompts.index');
+    Route::post('/creative-writing/prompts', [CreativeWritingPromptController::class, 'store'])->name('creative-writing.prompts.store');
+    Route::put('/creative-writing/prompts/{prompt}', [CreativeWritingPromptController::class, 'update'])->name('creative-writing.prompts.update');
+    Route::patch('/creative-writing/prompts/{prompt}/toggle', [CreativeWritingPromptController::class, 'toggle'])->name('creative-writing.prompts.toggle');
     Route::get('/workspace/{section}', [WorkspaceController::class, 'placeholder'])
         ->whereIn('section', ['assignments', 'gradebook', 'attendance', 'reports'])
         ->name('workspace.placeholder');
@@ -166,6 +176,11 @@ Route::middleware(['auth', 'student.access'])->prefix('student')->name('student.
     Route::middleware('student.password')->group(function () {
         Route::get('/', [StudentPortalController::class, 'home'])->name('home');
         Route::get('/learning', [StudentPortalController::class, 'learning'])->name('learning');
+        Route::get('/writing-journal', [StudentCreativeWritingController::class, 'index'])->name('writing-journal.index');
+        Route::get('/writing-journal/today', [StudentCreativeWritingController::class, 'today'])->name('writing-journal.today');
+        Route::get('/writing-journal/{entry}', [StudentCreativeWritingController::class, 'show'])->name('writing-journal.show');
+        Route::patch('/writing-journal/{entry}/draft', [StudentCreativeWritingController::class, 'saveDraft'])->name('writing-journal.draft');
+        Route::post('/writing-journal/{entry}/submit', [StudentCreativeWritingController::class, 'submit'])->name('writing-journal.submit');
         Route::get('/lessons/{lesson}/experience', [StudentLessonExperienceController::class, 'show'])->name('lessons.experience.show');
         Route::post('/lessons/{lesson}/experience/{progress}/activities/{activity}', [StudentLessonExperienceController::class, 'respond'])->name('lessons.experience.respond');
         Route::post('/lessons/{lesson}/experience/{progress}/activities/{activity}/draft', [StudentLessonExperienceController::class, 'saveDraft'])->name('lessons.experience.draft');

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import StudentPortalLayout from '@/Layouts/StudentPortalLayout.vue';
+import MiniStoryGoal from '@/Components/MiniStoryGoal.vue';
 import { Head, Link } from '@inertiajs/vue3';
 
 defineProps<{
     student: { first_name: string; preferred_name: string | null };
     academy: string;
     enrollment: { school_year: string; grade_level: string; status: string } | null;
+    writingJournal: any | null;
 }>();
 </script>
 
@@ -30,6 +32,14 @@ defineProps<{
         </section>
         <div v-else class="mission-notice">Your crew is finishing your explorer setup. Check back soon!</div>
 
+        <section v-if="writingJournal" class="writing-mission mb-4">
+            <div class="writing-header"><div><p class="mission-eyebrow mb-1">Creative Writing Journal</p><h2>Today’s Writing Mission</h2></div><span class="writing-status">{{ writingJournal.status.replace('_', ' ') }}</span></div>
+            <p v-if="writingJournal.category" class="category-chip">{{ writingJournal.category }}</p><h3>{{ writingJournal.title }}</h3><p class="writing-prompt">{{ writingJournal.prompt }}</p>
+            <div class="include-grid"><strong>Include:</strong><ul><li v-for="hint in writingJournal.include_hints" :key="hint">{{ hint }}</li></ul></div>
+            <MiniStoryGoal />
+            <div class="writing-footer"><span>{{ writingJournal.word_count }} words saved</span><Link class="btn btn-warning fw-bold" :href="writingJournal.url">{{ writingJournal.status === 'assigned' ? 'Start Writing' : writingJournal.status === 'submitted' ? 'Read My Story' : 'Continue Writing' }}</Link></div>
+        </section>
+
         <section class="next-adventure">
             <div class="next-icon" aria-hidden="true">↗</div>
             <div><p class="mission-eyebrow text-primary mb-1">Your next adventure</p><h2>Head to Today’s Missions</h2><p class="mb-0">You’ll see the next ready lesson for each subject—no hunting through a long list.</p></div>
@@ -40,4 +50,5 @@ defineProps<{
 
 <style scoped>
 .mission-hero{position:relative;display:flex;align-items:center;min-height:330px;overflow:hidden;border-radius:1.7rem;background:radial-gradient(circle at 82% 25%,#275c82 0 4%,transparent 5%),linear-gradient(135deg,#102f4b,#174f70 58%,#126c70);color:#fff;padding:clamp(2rem,6vw,4.5rem);box-shadow:0 18px 42px rgba(16,47,75,.2)}.hero-copy{position:relative;z-index:2;max-width:650px}.mission-eyebrow{text-transform:uppercase;letter-spacing:.14em;font-size:.78rem;font-weight:900}.mission-hero h1{font-size:clamp(2.2rem,6vw,4rem);line-height:1.05}.mission-hero .lead{max-width:580px;color:#d9edf3}.hero-action{display:inline-flex;align-items:center;gap:.65rem;border-radius:.85rem;background:#f0b84b;color:#17324d;padding:.8rem 1.1rem;font-weight:900;text-decoration:none}.hero-action:hover,.hero-action:focus{background:#ffd06e;color:#17324d}.hero-stars{position:absolute;right:31%;top:18%;color:#f0b84b;font-size:1.4rem;filter:drop-shadow(55px 75px 0 #fff) drop-shadow(-30px 145px 0 #79c9c6)}.planet-mark{position:absolute;right:-45px;bottom:-70px;width:270px;height:270px;border-radius:50%;background:linear-gradient(145deg,#f0b84b,#e27a5f);box-shadow:inset -30px -25px 0 rgba(135,57,51,.2)}.planet-mark:before{content:"";position:absolute;left:-55px;top:105px;width:360px;height:60px;border:12px solid rgba(255,255,255,.55);border-radius:50%;transform:rotate(-13deg)}.planet-mark span{position:absolute;width:38px;height:18px;left:78px;top:54px;border-radius:50%;background:rgba(135,57,51,.18)}.mission-details{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}.mission-details>div{display:grid;grid-template-columns:auto 1fr;column-gap:.9rem;align-items:center;border:1px solid #dbe7ed;border-radius:1rem;background:#fff;padding:1.1rem 1.25rem}.mission-details p{margin:0;color:#6a7d8b;font-size:.82rem}.mission-details strong{color:#193850;font-size:1.05rem}.detail-icon{grid-row:1/3;display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:#e4f2f0;color:#176b6c;font-weight:900}.status-dot{position:relative}.status-dot:after{content:"";width:12px;height:12px;border-radius:50%;background:#2c9a74;box-shadow:0 0 0 6px #bfe7d7}.next-adventure{display:grid;grid-template-columns:auto 1fr auto;gap:1.2rem;align-items:center;border:1px solid #d9e5ec;border-radius:1.3rem;background:#fff;padding:1.5rem;box-shadow:0 10px 24px rgba(31,61,83,.07)}.next-adventure h2{font-size:1.4rem;color:#193850}.next-adventure p{color:#607586}.next-icon{display:grid;place-items:center;width:58px;height:58px;border-radius:1rem;background:#e8f3fb;color:#3979a8;font-size:1.7rem;font-weight:900}.mission-notice{border-radius:1rem;background:#e8f3fb;color:#234f6d;padding:1rem 1.25rem;margin-bottom:1.5rem;font-weight:700}@media(max-width:767px){.planet-mark{opacity:.28;right:-120px}.mission-details{grid-template-columns:1fr}.next-adventure{grid-template-columns:auto 1fr}.next-adventure .btn{grid-column:1/-1;width:100%}}@media(max-width:480px){.mission-hero{min-height:360px;padding:1.5rem}.mission-hero h1{font-size:2.35rem}}
+.writing-mission{border-radius:1.4rem;background:linear-gradient(145deg,#fff7dc,#fff 62%);border:2px solid #f0c866;padding:clamp(1.3rem,4vw,2rem);box-shadow:0 12px 28px rgba(87,65,21,.09)}.writing-header,.writing-footer{display:flex;justify-content:space-between;align-items:center;gap:1rem}.writing-header h2{color:#253a62}.writing-status,.category-chip{display:inline-block;border-radius:99px;background:#e8e4fa;color:#504385;padding:.35rem .7rem;font-size:.78rem;font-weight:900;text-transform:capitalize}.category-chip{background:#dff2ef;color:#176b6c}.writing-mission h3{font-size:1.45rem;color:#703d75}.writing-prompt{font-size:1.08rem;line-height:1.7;color:#334b5b}.include-grid{display:grid;grid-template-columns:auto 1fr;gap:1rem;background:#fff;border-radius:1rem;padding:1rem}.include-grid ul{display:flex;flex-wrap:wrap;gap:.45rem;margin:0;padding:0;list-style:none}.include-grid li{border-radius:99px;background:#eef5fa;padding:.3rem .65rem;font-size:.86rem}.writing-mission details{margin:1rem 0;padding:.8rem 1rem;border-radius:.8rem;background:#f3effb}.writing-mission summary{cursor:pointer;font-weight:900;color:#4d417e}.writing-mission details p{margin:.7rem 0}.writing-footer span{color:#6a6271;font-weight:700}@media(max-width:600px){.writing-header,.writing-footer{align-items:stretch;flex-direction:column}.writing-footer .btn{width:100%}}
 </style>

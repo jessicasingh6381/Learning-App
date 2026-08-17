@@ -4,7 +4,7 @@ const page = usePage<any>();
 const can = (permission: string) => page.props.auth.permissions?.includes(permission);
 const primary = [
     ['Home', 'dashboard'], ['Students', 'students.index'], ['Learning Plan', 'workspace.learning-plan'],
-    ['Calendar', 'workspace.calendar'], ['Assignments', 'workspace.placeholder', 'assignments'],
+    ['Calendar', 'workspace.calendar'], ['Writing Journal', 'creative-writing.index'], ['Assignments', 'workspace.placeholder', 'assignments'],
     ['Gradebook', 'workspace.placeholder', 'gradebook'], ['Attendance', 'workspace.placeholder', 'attendance'],
     ['Reports', 'workspace.placeholder', 'reports'],
 ] as const;

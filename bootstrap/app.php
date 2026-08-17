@@ -28,6 +28,10 @@ return Application::configure(basePath: dirname(__DIR__))
             SubstituteBindings::class,
             ResolveActiveTenant::class,
         );
+        $middleware->prependToPriorityList(
+            SubstituteBindings::class,
+            ResolveStudentPortal::class,
+        );
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,

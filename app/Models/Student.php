@@ -31,6 +31,11 @@ class Student extends Model
         return $this->hasMany(StudentEnrollment::class)->latest('enrollment_date');
     }
 
+    public function creativeWritingEntries(): HasMany
+    {
+        return $this->hasMany(CreativeWritingEntry::class);
+    }
+
     public function getDisplayNameAttribute(): string
     {
         return $this->preferred_name ?: $this->first_name.' '.$this->last_name;

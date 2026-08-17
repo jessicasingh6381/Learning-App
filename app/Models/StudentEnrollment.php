@@ -47,4 +47,9 @@ class StudentEnrollment extends Model
     {
         return $this->hasMany(StudentLessonProgress::class);
     }
+
+    public function creativeWritingEntries(): HasMany
+    {
+        return $this->hasMany(CreativeWritingEntry::class);
+    }
 }

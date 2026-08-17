@@ -14,5 +14,6 @@ class DatabaseSeeder extends Seeder
     {
         $this->call(GradeLevelSeeder::class);
         $this->call(AcademicReferenceSeeder::class);
+        $this->call(CreativeWritingPromptSeeder::class);
     }
 }

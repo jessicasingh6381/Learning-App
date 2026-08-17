@@ -15,6 +15,7 @@ const page = usePage<any>();
                 <ul v-if="!restricted" class="navbar-nav me-auto">
                     <li class="nav-item"><Link class="nav-link" :class="{ active: route().current('student.home') }" :href="route('student.home')">Mission Control</Link></li>
                     <li class="nav-item"><Link class="nav-link" :class="{ active: route().current('student.learning') }" :href="route('student.learning')">Today’s Missions</Link></li>
+                    <li class="nav-item"><Link class="nav-link" :class="{ active: route().current('student.writing-journal.*') }" :href="route('student.writing-journal.index')">Writing Journal</Link></li>
                     <li class="nav-item"><Link class="nav-link" :class="{ active: route().current('student.profile') }" :href="route('student.profile')">My Profile</Link></li>
                 </ul>
                 <div class="ms-auto d-flex align-items-center gap-2">

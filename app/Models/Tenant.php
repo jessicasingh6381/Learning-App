@@ -53,4 +53,14 @@ class Tenant extends Model
     {
         return $this->hasMany(AcademicYearConfiguration::class);
     }
+
+    public function creativeWritingPrompts(): HasMany
+    {
+        return $this->hasMany(CreativeWritingPrompt::class);
+    }
+
+    public function creativeWritingEntries(): HasMany
+    {
+        return $this->hasMany(CreativeWritingEntry::class);
+    }
 }

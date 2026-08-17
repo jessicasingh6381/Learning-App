@@ -56,6 +56,7 @@ describe('Student portal foundation', () => {
                 student,
                 academy: 'Cosmic Quest Academy',
                 enrollment,
+                writingJournal: null,
             },
             global: { mocks: { route: routeMock } },
         });
@@ -72,6 +73,33 @@ describe('Student portal foundation', () => {
         expect(wrapper.text()).not.toContain('School years');
         expect(wrapper.text()).not.toContain('Members');
         expect(wrapper.text()).not.toContain('Switch tenant');
+    });
+
+    it('surfaces today\'s creative-writing mission with its progress', () => {
+        const wrapper = mount(Home, {
+            props: {
+                student,
+                academy: 'Cosmic Quest Academy',
+                enrollment,
+                writingJournal: {
+                    id: 12,
+                    title: 'The Hidden Door',
+                    prompt: 'You find a tiny door behind a bookshelf.',
+                    include_hints: ['Where it leads', 'Who opens it'],
+                    category: 'Adventure',
+                    status: 'in_progress',
+                    word_count: 87,
+                    url: '/student/writing-journal/12',
+                },
+            },
+            global: { mocks: { route: routeMock } },
+        });
+
+        expect(wrapper.text()).toContain('Today’s Writing Mission');
+        expect(wrapper.text()).toContain('The Hidden Door');
+        expect(wrapper.text()).toContain('87 words saved');
+        expect(wrapper.text()).toContain('Continue Writing');
+        expect(wrapper.get('.writing-footer a').attributes('href')).toBe('/student/writing-journal/12');
     });
 
     it('renders an encouraging empty mission board', () => {

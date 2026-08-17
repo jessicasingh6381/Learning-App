@@ -12,6 +12,8 @@ use App\Models\CalendarImport;
 use App\Models\CalendarImportProposal;
 use App\Models\CalendarProfile;
 use App\Models\Course;
+use App\Models\CreativeWritingEntry;
+use App\Models\CreativeWritingPrompt;
 use App\Models\CurriculumPackage;
 use App\Models\CurriculumPackageCourse;
 use App\Models\CurriculumImport;
@@ -67,6 +69,8 @@ class AuditService
         StandardsFramework::class => ['education_provider_id', 'name', 'short_name', 'jurisdiction', 'version_label', 'effective_start_date', 'effective_end_date', 'status', 'source_url'],
         Subject::class => ['name', 'code', 'sort_order', 'status'],
         Course::class => ['subject_id', 'standards_framework_id', 'education_provider_id', 'name', 'code', 'minimum_grade_level_id', 'maximum_grade_level_id', 'status'],
+        CreativeWritingPrompt::class => ['title','prompt','include_hints','category','minimum_grade_level_id','maximum_grade_level_id','active','source_type','source_key','created_by_user_id'],
+        CreativeWritingEntry::class => ['student_id','student_enrollment_id','school_year_id','creative_writing_prompt_id','instructional_date','prompt_title_snapshot','prompt_snapshot','include_hints_snapshot','category_snapshot','status','word_count','assigned_at','started_at','last_saved_at','submitted_at','teacher_feedback','feedback_by_user_id','feedback_at'],
         CurriculumPackage::class => ['education_provider_id', 'standards_framework_id', 'name', 'version_label', 'status', 'effective_start_date', 'effective_end_date', 'source_url'],
         CurriculumPackageCourse::class => ['curriculum_package_id', 'course_id', 'grade_level_id', 'sort_order', 'required'],
         CurriculumImport::class => ['academic_source_id', 'academic_source_file_id', 'curriculum_package_id', 'curriculum_package_course_id', 'subject_id', 'grade_level_id', 'school_year_id', 'standards_framework_id', 'import_type', 'import_context_key', 'status', 'parser_key', 'parser_version', 'extraction_method', 'source_title', 'source_revision_date', 'document_section', 'adopted_label', 'introduction_text', 'document_metadata', 'diagnostic', 'review_version', 'approved_by_user_id', 'approved_at'],
