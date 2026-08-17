@@ -87,6 +87,81 @@ function Resolve-AzureCliCommand {
     return $null
 }
 
+function Resolve-AppServiceScmHostName {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $AzureCli,
+        [Parameter(Mandatory = $true)]
+        [string] $ResourceGroupName,
+        [Parameter(Mandatory = $true)]
+        [string] $WebAppName
+    )
+
+    $metadataJson = (& $AzureCli webapp show --resource-group $ResourceGroupName --name $WebAppName `
+        --query '{defaultHostName:defaultHostName,enabledHostNames:enabledHostNames,hostNameSslStates:hostNameSslStates}' `
+        --output json --only-show-errors)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(($metadataJson -join "`n"))) {
+        throw "Could not retrieve App Service hostname metadata for $ResourceGroupName / $WebAppName."
+    }
+
+    try {
+        $metadata = (($metadataJson -join "`n") | ConvertFrom-Json)
+    } catch {
+        throw "Azure CLI returned invalid App Service hostname metadata for $ResourceGroupName / $WebAppName."
+    }
+
+    $repositoryHosts = @($metadata.hostNameSslStates |
+        Where-Object { $_.hostType -eq 'Repository' -and -not [string]::IsNullOrWhiteSpace($_.name) } |
+        ForEach-Object { $_.name.Trim().ToLowerInvariant() } |
+        Select-Object -Unique)
+    if ($repositoryHosts.Count -eq 1) {
+        return $repositoryHosts[0]
+    }
+    if ($repositoryHosts.Count -gt 1) {
+        throw "Azure returned multiple Repository hostnames for $ResourceGroupName / ${WebAppName}: $($repositoryHosts -join ', ')."
+    }
+
+    $enabledScmHosts = @($metadata.enabledHostNames |
+        Where-Object { $_ -and $_.Trim().ToLowerInvariant() -match '(^|\.)scm\.' } |
+        ForEach-Object { $_.Trim().ToLowerInvariant() } |
+        Select-Object -Unique)
+    if ($enabledScmHosts.Count -eq 1) {
+        return $enabledScmHosts[0]
+    }
+    if ($enabledScmHosts.Count -gt 1) {
+        throw "Azure returned multiple enabled SCM hostnames for $ResourceGroupName / ${WebAppName}: $($enabledScmHosts -join ', ')."
+    }
+
+    $defaultHostName = [string] $metadata.defaultHostName
+    $defaultHostName = $defaultHostName.Trim().ToLowerInvariant()
+    if ($defaultHostName -notmatch '^(?<site>[^.]+)\.(?<suffix>(?:[^.]+\.)*azurewebsites\.net)$') {
+        throw "Azure did not return an SCM hostname, and its default hostname cannot be safely converted: $defaultHostName"
+    }
+
+    return "$($Matches.site).scm.$($Matches.suffix)"
+}
+
+function Assert-ScmHostResolves {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $ScmHostName
+    )
+
+    if ($ScmHostName -notmatch '^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$' -or
+        $ScmHostName -notmatch '(^|\.)scm\.' -or $ScmHostName -notmatch '\.azurewebsites\.net$') {
+        throw "Azure returned an invalid SCM hostname: $ScmHostName"
+    }
+
+    try {
+        $addresses = @([Net.Dns]::GetHostAddresses($ScmHostName))
+    } catch {
+        throw "SCM hostname '$ScmHostName' did not resolve in DNS: $($_.Exception.Message)"
+    }
+    if ($addresses.Count -eq 0) {
+        throw "SCM hostname '$ScmHostName' did not resolve to any IP addresses."
+    }
+}
+
 if ($RemoteRoot -ne '/home/site/storage/app/private') {
     throw 'RemoteRoot is restricted to /home/site/storage/app/private.'
 }
@@ -95,6 +170,7 @@ if ($Execute -and $ConfirmTarget -cne $expectedConfirmation) {
 }
 
 $azureCli = $null
+$scmHostName = $null
 if ($Execute) {
     $azureCli = Resolve-AzureCliCommand
     if (-not $azureCli) {
@@ -106,6 +182,9 @@ Then close and reopen PowerShell, run az login, and retry. Dry-run mode does not
 '@
     }
     Write-Host "Azure CLI: $azureCli"
+    $scmHostName = Resolve-AppServiceScmHostName -AzureCli $azureCli -ResourceGroupName $ResourceGroup -WebAppName $AppName
+    Assert-ScmHostResolves -ScmHostName $scmHostName
+    Write-Host "SCM host: $scmHostName"
 }
 
 $files = @(Get-ChildItem -LiteralPath $resolvedStaging -Recurse -File)
@@ -130,7 +209,7 @@ foreach ($file in $files) {
         $encodedPath = (($target.Substring('/home/'.Length).Split('/') | ForEach-Object {
             [Uri]::EscapeDataString($_)
         }) -join '/')
-        $kuduUri = "https://$AppName.scm.azurewebsites.net/api/vfs/$encodedPath"
+        $kuduUri = "https://$scmHostName/api/vfs/$encodedPath"
         $temporaryFile = [IO.Path]::GetTempFileName()
         try {
             try {
